@@ -163,7 +163,7 @@ func main() {
 			Background(lipgloss.Color("#222")))
 	m.bottom = static
 
-	p := tea.NewProgram(m, tea.WithMouseCellMotion())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.p = p
 
 	if _, err := p.Run(); err != nil {

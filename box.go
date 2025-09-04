@@ -33,26 +33,26 @@ func (b *Box) resize(msg WindowSize) tea.Cmd {
 	b.h = msg.Height
 
 	if b.style.GetBorderTop() {
-		msg.Height -= 1
+		b.h -= 1
 	}
 
 	if b.style.GetBorderBottom() {
-		msg.Height -= 1
+		b.h -= 1
 	}
 
 	if b.style.GetBorderRight() {
-		msg.Width -= 1
+		b.w -= 1
 	}
 
 	if b.style.GetBorderLeft() {
-		msg.Width -= 1
+		b.w -= 1
 	}
 
 	return func() tea.Msg {
 		return WindowSize{
 			Loc:    b.ChildID,
-			Height: msg.Height,
-			Width:  msg.Width,
+			Height: b.h,
+			Width:  b.w,
 		}
 	}
 }
