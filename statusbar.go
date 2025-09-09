@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -15,18 +14,20 @@ type Status struct {
 	spinning bool
 }
 
+func freshSpinner() spinner.Model {
+	return spinner.New(spinner.WithSpinner(spinner.Points))
+}
+
 func NewStatus() Status {
 	s := Status{
-		spinner:  spinner.New(spinner.WithSpinner(spinner.Points)),
-		spinning: true,
+		spinner:  freshSpinner(),
+		spinning: false,
 	}
 
 	return s
 }
 
 func (s Status) Init() tea.Cmd {
-	slog.Info("here")
-
 	if s.spinning {
 		return s.spinner.Tick
 	}
@@ -41,10 +42,23 @@ func (s Status) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case msgInit:
+		return s, s.Init()
+
+	case msgWorking:
+		if msg == true {
+			s.spinning = true
+			cmds = append(cmds, s.spinner.Tick)
+		} else {
+			s.spinning = false
+		}
+
 	case spinner.TickMsg:
 		s.spinner, cmd = s.spinner.Update(msg)
 		if s.spinning {
 			cmds = append(cmds, cmd)
+		} else {
+			s.spinner = freshSpinner()
 		}
 
 	case tea.WindowSizeMsg:

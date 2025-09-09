@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	"log/slog"
+	"reflect"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,6 +16,7 @@ type msgInputSubmit string
 type msgPromptUpdate string
 type msgToolCall string
 type msgToolResult string
+type msgWorking bool
 
 type TextAreaInput struct {
 }
@@ -33,6 +36,37 @@ func viewLog(msg string, style lipgloss.Style) tea.Cmd {
 			Style: style,
 		}
 	}
+}
+
+type Controller interface {
+	Update(msg tea.Msg) (Controller, tea.Cmd)
+}
+
+type Controllers []Controller
+
+func (cs Controllers) Update(msg tea.Msg) (Controller, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
+	for i := range cs {
+		c, cmd := cs[i].Update(msg)
+		cs[i] = c
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	for _, cmd := range cmds {
+		slog.Info("controller cmd", "cmd", reflect.ValueOf(cmd), "type", reflect.TypeOf(cmd))
+	}
+
+	if len(cmds) > 0 {
+		cmd = tea.Sequence(cmds...)
+	}
+
+	return cs, cmd
 }
 
 func (t *TextAreaInput) Update(msg tea.Msg) (Controller, tea.Cmd) {
@@ -62,7 +96,10 @@ type LLMController struct {
 }
 
 func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
-	var cmds []tea.Cmd
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
 
 	switch msg := msg.(type) {
 	case msgPromptUpdate:
@@ -70,10 +107,22 @@ func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 		t.context.AddPrompt(string(msg))
 		t.lock.Unlock()
 
-		cmds = append(cmds, t.callModel)
+		cmds = append(cmds, []tea.Cmd{
+			func() tea.Msg {
+				return msgWorking(true)
+			},
+			t.callModel,
+			func() tea.Msg {
+				return msgWorking(false)
+			},
+		}...)
 	}
 
-	return t, tea.Batch(cmds...)
+	if len(cmds) > 0 {
+		cmd = tea.Sequence(cmds...)
+	}
+
+	return t, cmd
 }
 
 func (t *LLMController) callModel() tea.Msg {

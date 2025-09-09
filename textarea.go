@@ -23,7 +23,7 @@ func NewTextarea(id string) Textarea {
 }
 
 func (t Textarea) Init() tea.Cmd {
-	return textarea.Blink
+	return textarea.Blink // BUG(tqbf): why
 }
 
 func (t Textarea) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -33,6 +33,9 @@ func (t Textarea) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case msgInit:
+		return t, t.Init()
+
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, CurrentKeyMap.Send):

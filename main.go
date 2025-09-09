@@ -32,30 +32,6 @@ type WindowSize struct {
 	Loc    string
 }
 
-type Controller interface {
-	Update(msg tea.Msg) (Controller, tea.Cmd)
-}
-
-type Controllers []Controller
-
-func (cs Controllers) Update(msg tea.Msg) (Controller, tea.Cmd) {
-	cmds := []tea.Cmd{}
-
-	for i := range cs {
-		c, cmd := cs[i].Update(msg)
-		cs[i] = c
-		if cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-	}
-
-	for _, cmd := range cmds {
-		slog.Info("controller cmd", "cmd", cmd)
-	}
-
-	return cs, tea.Sequence(cmds...)
-}
-
 type rootWindow struct {
 	p                   *tea.Program
 	status, top, bottom tea.Model
@@ -64,6 +40,8 @@ type rootWindow struct {
 
 	db *sql.DB
 }
+
+type msgInit struct{}
 
 func newRootWindow(content string) rootWindow {
 	m := rootWindow{}
@@ -115,7 +93,9 @@ func filterKey(msg tea.Msg, keys ...string) bool {
 }
 
 func (m rootWindow) Init() tea.Cmd {
-	return nil
+	return func() tea.Msg {
+		return msgInit{}
+	}
 }
 
 func (m *rootWindow) resize(w, h int) tea.Cmd {
