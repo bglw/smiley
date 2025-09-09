@@ -1,9 +1,6 @@
 package main
 
 import (
-	"log/slog"
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -65,8 +62,6 @@ func (b Box) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case WindowSize:
-		slog.Info("heyo", "msg", msg, "id", b.ID)
-
 		if msg.Loc == b.ID {
 			cmds = append(cmds, b.resize(msg))
 		}
@@ -81,25 +76,16 @@ func (b Box) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (b Box) View() string {
-	slog.Info("box", "h", b.h, "w", b.w)
-
 	content := ""
 	if b.Inner != nil {
 		content = b.Inner.View()
 	}
-
-	slog.Info("viewport content first line", "line", strings.Split(content, "\n")[0])
 
 	vs := b.style.
 		Height(b.h).
 		Width(b.w).
 		AlignVertical(lipgloss.Top).
 		Render(content)
-
-	slog.Info("lipgloss rendered first line", "line", strings.Split(vs, "\n")[0])
-
-	slog.Info("box", "newlines", strings.Count(vs, "\n"))
-	slog.Info("box", "styleheight", lipgloss.Height(vs))
 
 	return vs
 }

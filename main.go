@@ -1,25 +1,20 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"log/slog"
 	"math"
 	"os"
-	"strings"
+	"path/filepath"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/superfly/contextwindow"
 )
 
 var (
-	// 	borderTL = "┌"
-	// 	borderTR = "┐"
-	// 	borderBL = "⎣"
-	// 	borderBR = "⎦"
-	// 	borderHR = "─"
-
 	border_4 = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), true, true).
 			BorderForeground(lipgloss.Color("240")).
@@ -37,14 +32,52 @@ type WindowSize struct {
 	Loc    string
 }
 
+type Controller interface {
+	Update(msg tea.Msg) (Controller, tea.Cmd)
+}
+
+type Controllers []Controller
+
+func (cs Controllers) Update(msg tea.Msg) (Controller, tea.Cmd) {
+	cmds := []tea.Cmd{}
+
+	for i := range cs {
+		c, cmd := cs[i].Update(msg)
+		cs[i] = c
+		if cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	for _, cmd := range cmds {
+		slog.Info("controller cmd", "cmd", cmd)
+	}
+
+	return cs, tea.Sequence(cmds...)
+}
+
 type rootWindow struct {
-	p *tea.Program
+	p                   *tea.Program
+	status, top, bottom tea.Model
+	controllers         Controller
+	w, h, th, bh        int
 
-	top, bottom tea.Model
+	db *sql.DB
+}
 
-	vm viewport.Model
+func newRootWindow(content string) rootWindow {
+	m := rootWindow{}
 
-	w, h, th, bh int
+	m.status = NewStatus()
+
+	box := NewBox("top", "top-inner", false, false, true, false)
+	box.Inner = NewViewport("top-inner", content)
+	m.top = box
+
+	input := NewTextarea("bottom")
+	m.bottom = input
+
+	return m
 }
 
 func init() {
@@ -68,6 +101,19 @@ func round(tot, pct int) int {
 	return int(math.Round(rows))
 }
 
+func filterKey(msg tea.Msg, keys ...string) bool {
+	if km, ok := msg.(tea.KeyMsg); ok {
+		ks := km.String()
+		for _, k := range keys {
+			if ks == k {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func (m rootWindow) Init() tea.Cmd {
 	return nil
 }
@@ -80,8 +126,8 @@ func (m *rootWindow) resize(w, h int) tea.Cmd {
 	m.h = h
 	m.w = w
 
-	m.th = round(m.h, 80)
-	m.bh = round(m.h, 20)
+	m.th = round(m.h, 90)
+	m.bh = round(m.h, 10)
 
 	slog.Info("main dims", "w", m.w, "h", m.h, "th", m.th, "bh", m.bh)
 
@@ -89,7 +135,7 @@ func (m *rootWindow) resize(w, h int) tea.Cmd {
 		func() tea.Msg {
 			return WindowSize{
 				Width:  w,
-				Height: m.th,
+				Height: m.th - 1,
 				Loc:    "top",
 			}
 		},
@@ -110,6 +156,8 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		slog.Info("keypress", "key", msg)
+
 		switch msg.Type {
 		case tea.KeyCtrlC:
 			return m, tea.Quit
@@ -119,10 +167,15 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.resize(msg.Width, msg.Height))
 	}
 
+	m.status, cmd = m.status.Update(msg)
+	cmds = append(cmds, cmd)
 	m.top, cmd = m.top.Update(msg)
 	cmds = append(cmds, cmd)
 	m.bottom, cmd = m.bottom.Update(msg)
 	cmds = append(cmds, cmd)
+	m.controllers, cmd = m.controllers.Update(msg)
+	cmds = append(cmds, cmd)
+
 	return m, tea.Batch(cmds...)
 }
 
@@ -131,44 +184,73 @@ func (m rootWindow) View() string {
 		return ""
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Center, m.top.View(), m.bottom.View())
+	return lipgloss.JoinVertical(lipgloss.Left, m.status.View(), m.top.View(), m.bottom.View())
 }
 
-func newRootWindow() rootWindow {
-	return rootWindow{}
+func eprintf(format string, a ...any) {
+	fmt.Fprintf(os.Stderr, format, a...)
+	if len(format) == 0 || format[len(format)-1] != '\n' {
+		fmt.Fprintln(os.Stderr)
+	}
+	os.Exit(1)
+}
+
+func mustGetenv(v string) string {
+	val := os.Getenv(v)
+	if val == "" {
+		eprintf("%s not set", v)
+	}
+
+	return val
 }
 
 func main() {
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-	slog.Info("new run")
-
-	m := newRootWindow()
-
 	eliot, _ := os.ReadFile("hollow.txt")
-	box := NewBox("top", "top-inner", false, false, true, false)
-	box.Inner = NewViewport("top-inner", string(eliot))
-	m.top = box
+	_ = eliot
+	m := newRootWindow("")
 
-	static := NewStatic("bottom", strings.Repeat("hello\n", 10),
-		lipgloss.NewStyle().
-			Background(lipgloss.Color("#222")))
-	m.bottom = static
+	cfgdir, err := ensureCtxAgentDir()
+	if err != nil {
+		eprintf("Find ~/.ctxagent: %v", err)
+	}
+
+	path := filepath.Join(cfgdir, "contextwindow.db")
+	db, err := contextwindow.NewContextDB(path)
+	if err != nil {
+		eprintf("Open %s: %v", path, err)
+	}
+
+	m.db = db
+
+	model, err := contextwindow.NewOpenAIResponsesModel(contextwindow.ResponsesModelGPT5Mini)
+	if err != nil {
+		eprintf("Connect to LLM: %v", err)
+	}
+
+	cw, err := contextwindow.NewContextWindowWithThreading(db, model, "", true)
+	if err != nil {
+		eprintf("Create context window: %v", err)
+	}
+
+	llm := LLMController{
+		model:   model,
+		context: cw,
+		db:      db,
+	}
+
+	controllers := Controllers{}
+	controllers = append(controllers, &TextAreaInput{})
+	controllers = append(controllers, &llm)
+	m.controllers = controllers
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.p = p
+	llm.context.AddMiddleware(&tuiMiddleware{
+		program: p,
+	})
 
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "main program error: %v\n", err)
-		os.Exit(1)
+		eprintf("main program error: %v", err)
 	}
 
 }

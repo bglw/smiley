@@ -1,8 +1,6 @@
 package main
 
 import (
-	"log/slog"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -28,7 +26,6 @@ func (s Static) Init() tea.Cmd {
 func (s Static) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case WindowSize:
-		slog.Info("smsg", "msg", msg, "id", s.id)
 		if msg.Loc == s.id {
 			s.w = msg.Width
 			s.h = msg.Height
