@@ -15,14 +15,6 @@ query = { description = "KQL query to filter logs", required = true }
 limit = { type = "number", description = "Maximum number of results to return" }
 
 [[tool]]
-name = "get_incidents"
-description = """
-Retrieve all open PagerDuty incidents. This is a good starting point for queries asking
-if anything is wrong anywhere in the system. Returns triggered and acknowledged incidents.
-"""
-command = "pagerduty-tool incidents"
-
-[[tool]]
 name = "system_info"
 description = "Get basic system information including uptime, disk usage, and memory stats."
 command = "system-info.sh"
