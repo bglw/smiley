@@ -14,17 +14,6 @@ import (
 	"github.com/superfly/contextwindow"
 )
 
-var (
-	border_4 = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), true, true).
-			BorderForeground(lipgloss.Color("240")).
-			Padding(0, 1)
-
-	border_hr = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), true, true).
-			BorderForeground(lipgloss.Color("228"))
-)
-
 // subwindow height
 type WindowSize struct {
 	Height int
@@ -43,13 +32,14 @@ type rootWindow struct {
 
 type msgInit struct{}
 
-func newRootWindow(content string) rootWindow {
+func newRootWindow(content string, cw *contextwindow.ContextWindow) rootWindow {
 	m := rootWindow{}
 
 	m.status = NewStatus()
 
 	box := NewBox("top", "top-inner", false, false, true, false)
 	box.Inner = NewViewport("top-inner", content)
+	box.Inner = NewDatabaseView("top-inner", cw)
 	m.top = box
 
 	input := NewTextarea("bottom")
@@ -187,7 +177,6 @@ func mustGetenv(v string) string {
 func main() {
 	eliot, _ := os.ReadFile("hollow.txt")
 	_ = eliot
-	m := newRootWindow("")
 
 	cfgdir, err := ensureCtxAgentDir()
 	if err != nil {
@@ -200,8 +189,6 @@ func main() {
 		eprintf("Open %s: %v", path, err)
 	}
 
-	m.db = db
-
 	model, err := contextwindow.NewOpenAIResponsesModel(contextwindow.ResponsesModelGPT5Mini)
 	if err != nil {
 		eprintf("Connect to LLM: %v", err)
@@ -211,6 +198,9 @@ func main() {
 	if err != nil {
 		eprintf("Create context window: %v", err)
 	}
+
+	m := newRootWindow("", cw)
+	m.db = db
 
 	llm := LLMController{
 		model:   model,

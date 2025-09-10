@@ -17,6 +17,7 @@ type msgPromptUpdate string
 type msgToolCall string
 type msgToolResult string
 type msgWorking bool
+type msgSelectContext string
 
 type TextAreaInput struct {
 }
@@ -102,6 +103,8 @@ func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case msgSelectContext:
+
 	case msgPromptUpdate:
 		t.lock.Lock()
 		t.context.AddPrompt(string(msg))
