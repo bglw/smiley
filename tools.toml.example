@@ -1,0 +1,23 @@
+# Example tool configuration file
+# Copy this to ~/.ctxagent/tools.toml and customize for your needs
+
+[[tool]]
+name = "get_logs"
+description = """
+Retrieve logs from OpenSearch using KQL queries. Use this when you need to investigate
+system issues, errors, or analyze application behavior. The query should be in KQL format.
+This tool is essential for debugging and monitoring system health.
+"""
+command = "llmtool run-tool get-logs"
+
+[tool.parameters]
+query = { description = "KQL query to filter logs", required = true }
+limit = { type = "number", description = "Maximum number of results to return" }
+
+[[tool]]
+name = "system_info"
+description = "Get basic system information including uptime, disk usage, and memory stats."
+command = "system-info.sh"
+
+[tool.parameters]
+format = { description = "Output format: json, yaml, or text", required = true }
