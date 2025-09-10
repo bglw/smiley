@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/superfly/contextwindow"
@@ -61,31 +63,37 @@ func generateCommand(
 	params map[string]ToolParameter) simpleToolFunction {
 
 	return func(ctx context.Context, args json.RawMessage) (string, error) {
-		// assume we have parameters:
-		//   query (string)
-		//   limit (number)
-		//
-		// then our JSON message will look like:
-		//
-		// var params struct {
-		//   Query string `json:"query"`
-		//   Limit int `json:"limit"`
-		// }
-		//
-		// but we're generating this dynamically so we'll instead
-		// need to parse this out of a map[string]interface{}
-		//
-		// var params = map[string]interface{}
-		// json.Unmarshall(args, &params)
-		//
-		// then, whatever "cmd" is, we'll need to os/exec it,
-		// substituting in {query} and {limit} into the string
-		// we execute.
-		//
-		// the command will produce a string (or an error);
-		// we can return both directly.
+		var parsedArgs map[string]interface{}
+		if err := json.Unmarshal(args, &parsedArgs); err != nil {
+			return "", fmt.Errorf("failed to parse arguments: %w", err)
+		}
 
-		return "", nil /* placeholder */
+		cmdStr := cmd
+		for paramName := range params {
+			placeholder := fmt.Sprintf("{%s}", paramName)
+			value, exists := parsedArgs[paramName]
+			if exists && value != nil {
+				cmdStr = strings.Replace(cmdStr, placeholder,
+					fmt.Sprintf("%v", value), -1)
+			} else if params[paramName].Required {
+				return "", fmt.Errorf("required parameter %s not provided", paramName)
+			} else {
+				cmdStr = strings.Replace(cmdStr, placeholder, "", -1)
+			}
+		}
+
+		cmdParts := strings.Fields(cmdStr)
+		if len(cmdParts) == 0 {
+			return "", fmt.Errorf("empty command")
+		}
+
+		execCmd := exec.CommandContext(ctx, cmdParts[0], cmdParts[1:]...)
+		output, err := execCmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
+		}
+
+		return string(output), nil
 	}
 }
 
@@ -108,7 +116,7 @@ func LoadTools(cw *contextwindow.ContextWindow, cfg *ToolsConfig) error {
 
 		cw.AddTool(tool,
 			contextwindow.ToolRunnerFunc(
-				generateCommand(toolCfg.Name, toolCfg.Parameters),
+				generateCommand(toolCfg.Command, toolCfg.Parameters),
 			))
 	}
 
