@@ -25,7 +25,7 @@ type msgViewportLog struct {
 	Style lipgloss.Style
 }
 
-func NewViewport(id, content string) Viewport {
+func NewViewport(id, content string) *Viewport {
 	lines := strings.Split(content, "\n")
 	slog.Info("viewport init", "totallines", len(lines), "firstline", lines[0])
 
@@ -38,14 +38,14 @@ func NewViewport(id, content string) Viewport {
 	v.vm.SetContent(content)
 	v.vm.GotoTop()
 
-	return v
+	return &v
 }
 
-func (v Viewport) Init() tea.Cmd {
+func (v *Viewport) Init() tea.Cmd {
 	return nil
 }
 
-func (v Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (v *Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -70,7 +70,7 @@ func (v Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return v, cmd
 }
 
-func (v Viewport) View() string {
+func (v *Viewport) View() string {
 	if v.vm.Height == 0 || v.vm.Width == 0 {
 		return ""
 	}

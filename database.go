@@ -21,7 +21,7 @@ type DatabaseView struct {
 	table table.Model
 }
 
-func NewDatabaseView(id string, cw *contextwindow.ContextWindow) DatabaseView {
+func NewDatabaseView(id string, cw *contextwindow.ContextWindow) *DatabaseView {
 	cols := []table.Column{
 		{Title: "Name", Width: 30},
 		{Title: "Tokens", Width: 10},
@@ -29,7 +29,7 @@ func NewDatabaseView(id string, cw *contextwindow.ContextWindow) DatabaseView {
 		{Title: "Duration", Width: 20},
 	}
 
-	return DatabaseView{
+	return &DatabaseView{
 		id: id,
 		cw: cw,
 		table: table.New(
@@ -118,11 +118,11 @@ func (s *DatabaseView) refreshTable() tea.Msg {
 	return msgContextTableRows(rows)
 }
 
-func (s DatabaseView) Init() tea.Cmd {
+func (s *DatabaseView) Init() tea.Cmd {
 	return s.refreshTable
 }
 
-func (s DatabaseView) Update(msg tea.Msg) (ret tea.Model, cmd tea.Cmd) {
+func (s *DatabaseView) Update(msg tea.Msg) (ret tea.Model, cmd tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -139,10 +139,13 @@ func (s DatabaseView) Update(msg tea.Msg) (ret tea.Model, cmd tea.Cmd) {
 		case "up":
 			s.table.MoveUp(1)
 		case "enter":
-			name := s.table.SelectedRow()[0]
-			cmds = append(cmds, func() tea.Msg {
-				return msgSelectContext(name)
-			})
+			row := s.table.SelectedRow()
+			if len(row) > 0 {
+				name := row[0]
+				cmds = append(cmds, func() tea.Msg {
+					return msgSelectContext(name)
+				})
+			}
 		}
 
 	case WindowSize:
@@ -161,7 +164,7 @@ func (s DatabaseView) Update(msg tea.Msg) (ret tea.Model, cmd tea.Cmd) {
 	return s, cmd
 }
 
-func (s DatabaseView) View() string {
+func (s *DatabaseView) View() string {
 	if s.w == 0 || s.h == 0 {
 		return ""
 	}

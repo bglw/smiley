@@ -54,10 +54,9 @@ func (b *Box) resize(msg WindowSize) tea.Cmd {
 	}
 }
 
-func (b Box) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (b Box) Update(msg tea.Msg) (Box, tea.Cmd) {
 	var (
 		cmds = []tea.Cmd{}
-		cmd  tea.Cmd
 	)
 
 	switch msg := msg.(type) {
@@ -65,11 +64,6 @@ func (b Box) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Loc == b.ID {
 			cmds = append(cmds, b.resize(msg))
 		}
-	}
-
-	if b.Inner != nil {
-		b.Inner, cmd = b.Inner.Update(msg)
-		cmds = append(cmds, cmd)
 	}
 
 	return b, tea.Batch(cmds...)

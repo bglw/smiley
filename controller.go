@@ -12,6 +12,8 @@ import (
 	"github.com/superfly/contextwindow"
 )
 
+// controllers are thingies that do the Update protocol but not the View protocol.
+
 type msgInputSubmit string
 type msgPromptUpdate string
 type msgToolCall string
