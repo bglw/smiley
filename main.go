@@ -248,6 +248,13 @@ func main() {
 		eprintf("Find ~/.ctxagent: %v", err)
 	}
 
+	toolConfigPath := filepath.Join(cfgdir, "tools.toml")
+	toolConfig, err := LoadToolConfig(toolConfigPath)
+	if err != nil {
+		eprintf("Load tool config: %v", err)
+	}
+	_ = toolConfig
+
 	path := filepath.Join(cfgdir, "contextwindow.db")
 	db, err := contextwindow.NewContextDB(path)
 	if err != nil {
