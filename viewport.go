@@ -25,6 +25,8 @@ type msgViewportLog struct {
 	Style lipgloss.Style
 }
 
+type msgResetViewport []msgViewportLog
+
 func NewViewport(id, content string) *Viewport {
 	lines := strings.Split(content, "\n")
 	slog.Info("viewport init", "totallines", len(lines), "firstline", lines[0])
@@ -53,6 +55,9 @@ func (v *Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if filterKey(msg, "pgup", "pgdown", "alt+up", "alt+down") {
 			v.vm, cmd = v.vm.Update(msg)
 		}
+
+	case msgResetViewport:
+		v.resetViewport(msg)
 
 	case msgViewportLog:
 		v.Add(msg.Style.Render(msg.Msg))
@@ -85,6 +90,23 @@ func (v *Viewport) rewrap() {
 		content = append(content, wordwrap.String(c, v.w-5))
 	}
 	v.Content = content
+}
+
+func (v *Viewport) resetViewport(lines []msgViewportLog) {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.Content = []string{}
+	v.live.Reset()
+
+	// don't want to call SetContent in a loop
+	for _, line := range lines {
+		entry := line.Style.Render(wordwrap.String(line.Msg, v.w-5))
+		v.Content = append(v.Content, entry)
+		v.live.WriteString(entry + "\n")
+	}
+
+	v.vm.SetContent(v.live.String())
 }
 
 func (v *Viewport) Add(c string) {

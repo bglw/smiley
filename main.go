@@ -41,6 +41,7 @@ type rootWindow struct {
 }
 
 type msgInit struct{}
+type msgSwitchScreen int
 
 func newRootWindow(content string, cw *contextwindow.ContextWindow) rootWindow {
 	m := rootWindow{}
@@ -138,29 +139,36 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		keyb bool
 	)
 
+	swtch := func(state int) (tea.Model, tea.Cmd) {
+		switch state {
+		case screenHistory:
+			m.top.Inner = m.history
+			m.state = screenHistory
+			return m, nil
+		case screenLog:
+			m.top.Inner = m.log
+			m.state = screenLog
+			return m, nil
+		default:
+			panic("bad state")
+		}
+	}
+
 	switch msg := msg.(type) {
+	case msgSwitchScreen:
+		return swtch(int(msg))
+
 	case tea.KeyMsg:
 		slog.Info("keypress", "key", msg)
 		keyb = true
-
-		// BUG(tqbf): we're not propagating messages to things outside
-		// the current view, and we need to filter keystrokes in accordance
-		// with the view
-		//
-		// in particular: the dormant views aren't getting WindowSize
-		// messages, so their size is Zero, so they're not initializing
 
 		switch {
 		case key.Matches(msg, CurrentKeyMap.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, CurrentKeyMap.History):
-			m.top.Inner = m.history
-			m.state = screenHistory
-			return m, nil
+			return swtch(screenHistory)
 		case key.Matches(msg, CurrentKeyMap.Log):
-			m.top.Inner = m.log
-			m.state = screenLog
-			return m, nil
+			return swtch(screenLog)
 		}
 
 	case tea.WindowSizeMsg:

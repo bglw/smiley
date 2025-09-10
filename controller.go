@@ -106,6 +106,7 @@ func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case msgSelectContext:
+		return t.selectContext(string(msg))
 
 	case msgPromptUpdate:
 		t.lock.Lock()
@@ -148,4 +149,56 @@ func (t *LLMController) callModel() tea.Msg {
 		Msg:   response + "\n",
 		Style: styleResponseText,
 	}
+}
+
+func (t *LLMController) selectContext(name string) (Controller, tea.Cmd) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	err := t.context.SwitchContext(name)
+	if err != nil {
+		slog.Error("switch context", "error", err)
+		return t, nil
+	}
+
+	records, err := t.context.LiveRecords()
+	if err != nil {
+		slog.Error("read records", "error", err)
+		return t, nil
+	}
+
+	resetMsg := []msgViewportLog{}
+	for _, r := range records {
+		switch r.Source {
+		case contextwindow.Prompt:
+			resetMsg = append(resetMsg, msgViewportLog{
+				Style: stylePromptText,
+				Msg:   r.Content,
+			})
+		case contextwindow.ModelResp:
+			resetMsg = append(resetMsg, msgViewportLog{
+				Style: styleResponseText,
+				Msg:   r.Content,
+			})
+		case contextwindow.ToolCall:
+			resetMsg = append(resetMsg, msgViewportLog{
+				Style: styleToolLogText,
+				Msg:   r.Content,
+			})
+		case contextwindow.ToolOutput:
+			resetMsg = append(resetMsg, msgViewportLog{
+				Style: styleToolResponseText,
+				Msg:   r.Content,
+			})
+		}
+	}
+
+	return t, tea.Sequence(
+		func() tea.Msg {
+			return msgResetViewport(resetMsg)
+		},
+		func() tea.Msg {
+			return msgSwitchScreen(screenLog)
+		},
+	)
 }
