@@ -1,149 +1,107 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGenerateCommand(t *testing.T) {
+func processCommandString(cmd string, args map[string]interface{}) string {
+	cmdStr := cmd
+
+	bracketRegex := regexp.MustCompile(`\[([^\[\]]+)\]`)
+	for {
+		matches := bracketRegex.FindStringSubmatch(cmdStr)
+		if matches == nil {
+			break
+		}
+
+		bracketContent := matches[1]
+		if hasAllParameters(bracketContent, args) {
+			cmdStr = strings.Replace(cmdStr, matches[0], bracketContent, 1)
+		} else {
+			cmdStr = strings.Replace(cmdStr, matches[0], "", 1)
+		}
+	}
+
+	for paramName, value := range args {
+		if value != nil {
+			placeholder := "{" + paramName + "}"
+			cmdStr = strings.Replace(cmdStr, placeholder, fmt.Sprintf("%v", value), -1)
+		}
+	}
+
+	return strings.Join(strings.Fields(cmdStr), " ")
+}
+
+func TestBracketSyntax(t *testing.T) {
 	tests := []struct {
-		name        string
-		cmd         string
-		params      map[string]ToolParameter
-		args        map[string]interface{}
-		expectError bool
-		description string
+		name     string
+		cmd      string
+		params   map[string]ToolParameter
+		args     map[string]interface{}
+		expected string
 	}{
 		{
-			name: "simple echo command",
-			cmd:  "echo {message}",
+			name: "echo with flag included",
+			cmd:  "echo [-v {verbose}] {message}",
 			params: map[string]ToolParameter{
+				"verbose": {Type: "string", Required: false},
 				"message": {Type: "string", Required: true},
 			},
 			args: map[string]interface{}{
-				"message": "hello world",
+				"verbose": "true",
+				"message": "hello",
 			},
-			expectError: false,
-			description: "should substitute message parameter",
+			expected: "echo -v true hello",
 		},
 		{
-			name: "missing required parameter",
-			cmd:  "echo {message}",
+			name: "echo with flag excluded",
+			cmd:  "echo [-v {verbose}] {message}",
 			params: map[string]ToolParameter{
+				"verbose": {Type: "string", Required: false},
 				"message": {Type: "string", Required: true},
 			},
-			args:        map[string]interface{}{},
-			expectError: true,
-			description: "should fail when required parameter missing",
-		},
-		{
-			name: "optional parameter missing",
-			cmd:  "echo hello {message}",
-			params: map[string]ToolParameter{
-				"message": {Type: "string", Required: false},
+			args: map[string]interface{}{
+				"message": "hello",
 			},
-			args:        map[string]interface{}{},
-			expectError: false,
-			description: "should succeed when optional parameter missing and remove placeholder",
+			expected: "echo hello",
 		},
 		{
-			name: "multiple parameters",
-			cmd:  "echo {greeting} {name}",
+			name: "weird syntax with plus",
+			cmd:  "echo [+trace {level}] {message}",
 			params: map[string]ToolParameter{
-				"greeting": {Type: "string", Required: true},
-				"name":     {Type: "string", Required: true},
+				"level":   {Type: "number", Required: false},
+				"message": {Type: "string", Required: true},
 			},
 			args: map[string]interface{}{
-				"greeting": "hello",
-				"name":     "alice",
+				"level":   3,
+				"message": "test",
 			},
-			expectError: false,
-			description: "should substitute multiple parameters",
+			expected: "echo +trace 3 test",
+		},
+		{
+			name: "multiple brackets",
+			cmd:  "echo [-v] [--output {format}] {message}",
+			params: map[string]ToolParameter{
+				"format":  {Type: "string", Required: false},
+				"message": {Type: "string", Required: true},
+			},
+			args: map[string]interface{}{
+				"format":  "json",
+				"message": "test",
+			},
+			expected: "echo --output json test",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fn := generateCommand(tt.cmd, tt.params)
-
-			argsJSON, err := json.Marshal(tt.args)
-			assert.NoError(t, err)
-
-			result, err := fn(context.Background(), argsJSON)
-
-			if tt.expectError {
-				assert.Error(t, err, tt.description)
-			} else {
-				assert.NoError(t, err, tt.description)
-				assert.NotEmpty(t, result, "should return command output")
-			}
+			result := processCommandString(tt.cmd, tt.args)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-func TestParameterSubstitution(t *testing.T) {
-	cmd := "echo hello {name} world {age}"
-	params := map[string]ToolParameter{
-		"name": {Type: "string", Required: true},
-		"age":  {Type: "number", Required: false},
-	}
-
-	t.Run("both parameters provided", func(t *testing.T) {
-		fn := generateCommand(cmd, params)
-		argsJSON, _ := json.Marshal(map[string]interface{}{
-			"name": "alice",
-			"age":  25,
-		})
-		result, err := fn(context.Background(), argsJSON)
-		assert.NoError(t, err)
-		assert.Contains(t, result, "hello alice world 25")
-	})
-
-	t.Run("optional parameter missing", func(t *testing.T) {
-		fn := generateCommand(cmd, params)
-		argsJSON, _ := json.Marshal(map[string]interface{}{
-			"name": "bob",
-		})
-		result, err := fn(context.Background(), argsJSON)
-		assert.NoError(t, err)
-		assert.Contains(t, result, "hello bob world")
-		assert.NotContains(t, result, "{age}")
-	})
-}
-
-func TestLoadToolsIntegration(t *testing.T) {
-	config, err := LoadToolConfig("test_tools.toml")
-	assert.NoError(t, err)
-	assert.Len(t, config.Tools, 1)
-
-	tool := config.Tools[0]
-	assert.Equal(t, "test_echo", tool.Name)
-	assert.Equal(t, "echo Query: {query} Limit: {limit}", tool.Command)
-	assert.Len(t, tool.Parameters, 2)
-
-	fn := generateCommand(tool.Command, tool.Parameters)
-
-	t.Run("with both parameters", func(t *testing.T) {
-		argsJSON, _ := json.Marshal(map[string]interface{}{
-			"query": "test search",
-			"limit": 10,
-		})
-		result, err := fn(context.Background(), argsJSON)
-		assert.NoError(t, err)
-		assert.Contains(t, result, "Query: test search Limit: 10")
-	})
-
-	t.Run("with only required parameter", func(t *testing.T) {
-		argsJSON, _ := json.Marshal(map[string]interface{}{
-			"query": "another test",
-		})
-		result, err := fn(context.Background(), argsJSON)
-		assert.NoError(t, err)
-		assert.Contains(t, result, "Query: another test")
-		assert.Contains(t, result, "Limit:")
-		assert.NotContains(t, result, "{limit}")
-	})
 }

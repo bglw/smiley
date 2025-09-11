@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -69,18 +70,38 @@ func generateCommand(
 		}
 
 		cmdStr := cmd
-		for paramName := range params {
-			placeholder := fmt.Sprintf("{%s}", paramName)
-			value, exists := parsedArgs[paramName]
-			if exists && value != nil {
-				cmdStr = strings.Replace(cmdStr, placeholder,
-					fmt.Sprintf("%v", value), -1)
-			} else if params[paramName].Required {
-				return "", fmt.Errorf("required parameter %s not provided", paramName)
+
+		bracketRegex := regexp.MustCompile(`\[([^\[\]]+)\]`)
+		for {
+			matches := bracketRegex.FindStringSubmatch(cmdStr)
+			if matches == nil {
+				break
+			}
+
+			bracketContent := matches[1]
+			if hasAllParameters(bracketContent, parsedArgs) {
+				cmdStr = strings.Replace(cmdStr, matches[0], bracketContent, 1)
 			} else {
-				cmdStr = strings.Replace(cmdStr, placeholder, "", -1)
+				cmdStr = strings.Replace(cmdStr, matches[0], "", 1)
 			}
 		}
+
+		paramRegex := regexp.MustCompile(`\{(\w+)\}`)
+		for paramName := range params {
+			value, exists := parsedArgs[paramName]
+			if exists && value != nil {
+				cmdStr = paramRegex.ReplaceAllStringFunc(cmdStr, func(match string) string {
+					if match == fmt.Sprintf("{%s}", paramName) {
+						return fmt.Sprintf("%v", value)
+					}
+					return match
+				})
+			} else if params[paramName].Required {
+				return "", fmt.Errorf("required parameter %s not provided", paramName)
+			}
+		}
+
+		cmdStr = strings.Join(strings.Fields(cmdStr), " ")
 
 		cmdParts := strings.Fields(cmdStr)
 		if len(cmdParts) == 0 {
@@ -121,4 +142,21 @@ func LoadTools(cw *contextwindow.ContextWindow, cfg *ToolsConfig) error {
 	}
 
 	return nil
+}
+
+func hasAllParameters(fragment string, args map[string]interface{}) bool {
+	paramRegex := regexp.MustCompile(`\{(\w+)\}`)
+	matches := paramRegex.FindAllStringSubmatch(fragment, -1)
+
+	if len(matches) == 0 {
+		return false
+	}
+
+	for _, match := range matches {
+		paramName := match[1]
+		if _, exists := args[paramName]; !exists {
+			return false
+		}
+	}
+	return true
 }
