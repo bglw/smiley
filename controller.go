@@ -15,10 +15,18 @@ import (
 
 type msgInputSubmit string
 type msgPromptUpdate string
-type msgToolCall string
-type msgToolResult string
+type msgModelResponse string
 type msgWorking bool
 type msgSelectContext string
+type msgTokenUsage float64
+
+type msgToolCall struct {
+	name     string
+	complete bool
+	err      error
+	size     int
+	msg      string
+}
 
 type TextAreaInput struct {
 }
@@ -100,15 +108,23 @@ func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 	)
 
 	switch msg := msg.(type) {
+	case msgModelResponse:
+		cmds = append(cmds, viewLog(string(msg)+"\n", styleResponseText))
+		cmds = append(cmds, t.tokenUsage())
+		return t, tea.Batch(cmds...)
+
 	case msgToolCall:
+		cmds = []tea.Cmd{t.tokenUsage()}
+
 		if *optLogTools {
-			return t, viewLog(string(msg)+"\n", styleToolLogText)
+			if !msg.complete {
+				cmds = append(cmds, viewLog(string(msg.msg)+"\n", styleToolLogText))
+			} else {
+				cmds = append(cmds, viewLog(string(msg.msg)+"\n", styleToolResponseText))
+			}
 		}
 
-	case msgToolResult:
-		if *optLogTools {
-			return t, viewLog(string(msg)+"\n", styleToolResponseText)
-		}
+		return t, tea.Batch(cmds...)
 
 	case msgSelectContext:
 		return t.selectContext(string(msg))
@@ -122,6 +138,7 @@ func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 			func() tea.Msg {
 				return msgWorking(true)
 			},
+			t.tokenUsage(),
 			t.callModel,
 			func() tea.Msg {
 				return msgWorking(false)
@@ -150,10 +167,7 @@ func (t *LLMController) callModel() tea.Msg {
 
 	}
 
-	return msgViewportLog{
-		Msg:   response + "\n",
-		Style: styleResponseText,
-	}
+	return msgModelResponse(response)
 }
 
 func (t *LLMController) selectContext(name string) (Controller, tea.Cmd) {
@@ -206,4 +220,16 @@ func (t *LLMController) selectContext(name string) (Controller, tea.Cmd) {
 			return msgSwitchScreen(screenLog)
 		},
 	)
+}
+
+func (t *LLMController) tokenUsage() tea.Cmd {
+	usage, err := t.context.TokenUsage()
+
+	if err != nil {
+		return nil
+	}
+
+	return func() tea.Msg {
+		return msgTokenUsage(usage.Percent)
+	}
 }

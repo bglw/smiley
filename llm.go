@@ -13,7 +13,10 @@ type tuiMiddleware struct {
 
 func (tm *tuiMiddleware) OnToolCall(ctx context.Context, name, args string) {
 	msg := fmt.Sprintf("%s(%s)", name, args)
-	tm.program.Send(msgToolCall(msg))
+	tm.program.Send(msgToolCall{
+		name: name,
+		msg:  msg,
+	})
 }
 
 func (tm *tuiMiddleware) OnToolResult(ctx context.Context, name, result string, err error) {
@@ -23,5 +26,11 @@ func (tm *tuiMiddleware) OnToolResult(ctx context.Context, name, result string, 
 	} else {
 		msg = fmt.Sprintf("%s: (%d bytes)", name, len(result))
 	}
-	tm.program.Send(msgToolResult(msg))
+	tm.program.Send(msgToolCall{
+		complete: true,
+		size:     len(result),
+		err:      err,
+		msg:      msg,
+		name:     name,
+	})
 }
