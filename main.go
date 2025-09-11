@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"log/slog"
@@ -240,8 +241,12 @@ func mustGetenv(v string) string {
 }
 
 func main() {
-	eliot, _ := os.ReadFile("hollow.txt")
-	_ = eliot
+	var (
+		toolConfig = flag.String("tools", "", "Path to tools.toml")
+		contextDb  = flag.String("db", "", "Path to contextwindow.db")
+	)
+
+	flag.Parse()
 
 	cfgdir, err := ensureCtxAgentDir()
 	if err != nil {
@@ -249,13 +254,21 @@ func main() {
 	}
 
 	toolConfigPath := filepath.Join(cfgdir, "tools.toml")
-	toolConfig, err := LoadToolConfig(toolConfigPath)
-	if err != nil {
-		eprintf("Load tool config: %v", err)
+	if *toolConfig != "" {
+		toolConfigPath = *toolConfig
 	}
-	_ = toolConfig
+	tools, err := LoadToolConfig(toolConfigPath)
+	if err != nil {
+		if *toolConfig != "" {
+			eprintf("Load tool config: %v", err)
+		}
+		tools = nil
+	}
 
 	path := filepath.Join(cfgdir, "contextwindow.db")
+	if *contextDb != "" {
+		path = *contextDb
+	}
 	db, err := contextwindow.NewContextDB(path)
 	if err != nil {
 		eprintf("Open %s: %v", path, err)
@@ -269,6 +282,12 @@ func main() {
 	cw, err := contextwindow.NewContextWindowWithThreading(db, model, "", true)
 	if err != nil {
 		eprintf("Create context window: %v", err)
+	}
+
+	if tools != nil {
+		if err = LoadTools(cw, tools); err != nil {
+			eprintf("Loading tool definitions from %s: %v", toolConfigPath, err)
+		}
 	}
 
 	m := newRootWindow("", cw)
