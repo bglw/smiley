@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"regexp"
@@ -23,11 +24,36 @@ type ToolConfig struct {
 	Name        string                   `toml:"name"`
 	Description string                   `toml:"description"`
 	Command     string                   `toml:"command"`
+	InfoCommand string                   `toml:"info_command"`
 	Parameters  map[string]ToolParameter `toml:"parameters"`
 }
 
 type ToolsConfig struct {
 	Tools []ToolConfig `toml:"tool"`
+}
+
+func toolFromInfoCommand(cmdline string) (ret ToolConfig, err error) {
+	parts := strings.Fields(strings.Join(strings.Fields(cmdline), " "))
+	if len(parts) == 0 {
+		return ret, fmt.Errorf("empty command")
+	}
+
+	cmd := exec.Command(parts[0], parts[1:]...)
+	cmd.Env = os.Environ()
+
+	output, err := cmd.Output()
+	if err != nil {
+		return ret, fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
+	}
+
+	slog.Info("output", "out", string(output))
+
+	if err = toml.Unmarshal(output, &ret); err != nil {
+		return ret, fmt.Errorf("parse failed: %w\nOutput: %s", err, string(output))
+	}
+
+	slog.Info("tool from cmd", "tool", ret)
+	return ret, nil
 }
 
 func LoadToolConfig(configPath string) (*ToolsConfig, error) {
@@ -37,19 +63,26 @@ func LoadToolConfig(configPath string) (*ToolsConfig, error) {
 
 	var config ToolsConfig
 	if _, err := toml.DecodeFile(configPath, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse tool config %s: %w", configPath, err)
+		return nil, fmt.Errorf("parse tool config %s: %w", configPath, err)
 	}
 
 	for i := range config.Tools {
 		tool := &config.Tools[i]
-		if tool.Parameters == nil {
-			tool.Parameters = make(map[string]ToolParameter)
-		}
 
-		for paramName, param := range tool.Parameters {
-			if param.Type == "" {
-				param.Type = "string"
-				tool.Parameters[paramName] = param
+		if tool.InfoCommand != "" {
+			tool, err := toolFromInfoCommand(tool.InfoCommand)
+			if err != nil {
+				return nil, fmt.Errorf("parse tool info: %w", err)
+			}
+			config.Tools[i] = tool
+		} else if tool.Parameters == nil {
+			tool.Parameters = make(map[string]ToolParameter)
+		} else {
+			for paramName, param := range tool.Parameters {
+				if param.Type == "" {
+					param.Type = "string"
+					tool.Parameters[paramName] = param
+				}
 			}
 		}
 	}
