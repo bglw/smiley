@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"strings"
 	"sync"
 
@@ -29,7 +28,6 @@ type msgResetViewport []msgViewportLog
 
 func NewViewport(id, content string) *Viewport {
 	lines := strings.Split(content, "\n")
-	slog.Info("viewport init", "totallines", len(lines), "firstline", lines[0])
 
 	v := Viewport{
 		ID:      id,

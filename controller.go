@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
-	"reflect"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -59,10 +58,6 @@ func (cs Controllers) Update(msg tea.Msg) (Controller, tea.Cmd) {
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	}
-
-	for _, cmd := range cmds {
-		slog.Info("controller cmd", "cmd", reflect.ValueOf(cmd), "type", reflect.TypeOf(cmd))
 	}
 
 	if len(cmds) > 0 {

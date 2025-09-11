@@ -254,6 +254,7 @@ func main() {
 	}
 
 	toolConfigPath := filepath.Join(cfgdir, "tools.toml")
+
 	if *toolConfig != "" {
 		toolConfigPath = *toolConfig
 	}
