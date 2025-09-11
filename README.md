@@ -43,9 +43,11 @@ Each tool is defined with:
 
 ### Parameter Configuration
 
+These are deliberately simple right now. 
+
 Parameters support:
 
-- **type**: `"string"` (default) or `"number"`
+- **type**: `"string"`or `"number"`
 - **description**: Explanation of what the parameter does
 - **required**: `true` or `false` (default)
 
@@ -64,6 +66,25 @@ command = "llmtool run-tool get-logs"
 query = { description = "KQL query to filter logs", required = true }
 limit = { type = "number", description = "Maximum number of results to return" }
 ```
+
+### Automatic Tool Configuration
+
+If you provide an `info_command`, we'll call that to figure out what the tool definition
+should be. Example:
+
+```
+[[tool]]
+info_command = "/usr/local/bin/agent-tool foo info"
+
+```
+
+**Annoying note**: Right now, the output of that command needs to be the TOML for 
+a *single tool definition* --- don't include `[[tool]]` at the top, and it's 
+`[parameters]` and not `[tool.parameters]`. This is dumb but it's the way it is.
+
+Configuring tools this way makes it simpler to package tool definitions into a single
+shell script or binary or whatever without moving around weird big config files. I like
+it.
 
 ### Setup
 
