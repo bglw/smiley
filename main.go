@@ -1,6 +1,8 @@
 package main
 
 import (
+	_ "embed"
+
 	"database/sql"
 	"flag"
 	"fmt"
@@ -44,6 +46,9 @@ type rootWindow struct {
 
 	db *sql.DB
 }
+
+//go:embed systemprompt.default.md
+var defaultSystemPrompt string
 
 type msgInit struct{}
 type msgSwitchScreen int
@@ -277,9 +282,17 @@ func mustGetenv(v string) string {
 
 func main() {
 	var (
+		systemMd   = flag.String("system", "", "Path to system.md")
 		toolConfig = flag.String("tools", "", "Path to tools.toml")
 		contextDb  = flag.String("db", "", "Path to contextwindow.db")
+		maxTokens  = flag.Int("maxtokens", 60_000, "Maximum tokens before compacting")
 	)
+
+	flag.Usage = func() {
+		fmt.Println("smiley [options]")
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
 
 	flag.Parse()
 
@@ -303,6 +316,20 @@ func main() {
 		tools = nil
 	}
 
+	systemPrompt := defaultSystemPrompt
+	systemPromptPath := filepath.Join(cfgdir, "system.md")
+	if *systemMd != "" {
+		systemPromptPath = *systemMd
+	}
+	pbuf, err := os.ReadFile(systemPromptPath)
+	if err != nil {
+		if *systemMd != "" {
+			eprintf("Loading %s: %v", systemPromptPath, err)
+		}
+	} else {
+		systemPrompt = string(pbuf)
+	}
+
 	path := filepath.Join(cfgdir, "contextwindow.db")
 	if *contextDb != "" {
 		path = *contextDb
@@ -321,6 +348,9 @@ func main() {
 	if err != nil {
 		eprintf("Create context window: %v", err)
 	}
+
+	cw.SetSystemPrompt(systemPrompt)
+	cw.SetMaxTokens(*maxTokens)
 
 	if tools != nil {
 		if err = LoadTools(cw, tools); err != nil {
