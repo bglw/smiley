@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"regexp"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/superfly/contextwindow"
@@ -54,6 +57,11 @@ func LoadToolConfig(configPath string) (*ToolsConfig, error) {
 	return &config, nil
 }
 
+var (
+	bracketRegex = regexp.MustCompile(`\[([^\[\]]+)\]`)
+	paramRegex   = regexp.MustCompile(`\{(\w+)\}`)
+)
+
 type simpleToolFunction func(context.Context, json.RawMessage) (string, error)
 
 func generateCommand(
@@ -61,31 +69,68 @@ func generateCommand(
 	params map[string]ToolParameter) simpleToolFunction {
 
 	return func(ctx context.Context, args json.RawMessage) (string, error) {
-		// assume we have parameters:
-		//   query (string)
-		//   limit (number)
-		//
-		// then our JSON message will look like:
-		//
-		// var params struct {
-		//   Query string `json:"query"`
-		//   Limit int `json:"limit"`
-		// }
-		//
-		// but we're generating this dynamically so we'll instead
-		// need to parse this out of a map[string]interface{}
-		//
-		// var params = map[string]interface{}
-		// json.Unmarshall(args, &params)
-		//
-		// then, whatever "cmd" is, we'll need to os/exec it,
-		// substituting in {query} and {limit} into the string
-		// we execute.
-		//
-		// the command will produce a string (or an error);
-		// we can return both directly.
+		var parsedArgs map[string]interface{}
+		if err := json.Unmarshal(args, &parsedArgs); err != nil {
+			return "", fmt.Errorf("execute tool \"%s\": failed to parse arguments: %w", cmd, err)
+		}
 
-		return "", nil /* placeholder */
+		cmdStr := cmd
+
+		// for each [optional] [--flag], extract the flag, see
+		// if we have the needed {params} to expand it, otherwise
+		// zap the whole [--optional flag].
+		//
+		// ie, for "tcpdump tcp [and port {port}]", when {port}
+		// is optional.
+
+		for {
+			matches := bracketRegex.FindStringSubmatch(cmdStr)
+			if matches == nil {
+				break
+			}
+
+			optionalFlag := matches[1]
+			if hasAllParameters(optionalFlag, parsedArgs) {
+				cmdStr = strings.Replace(cmdStr, matches[0], optionalFlag, 1)
+			} else {
+				cmdStr = strings.Replace(cmdStr, matches[0], "", 1)
+			}
+		}
+
+		// now substitute in the parameters themselves
+
+		for paramName := range params {
+			value, exists := parsedArgs[paramName]
+			if exists && value != nil {
+				cmdStr = paramRegex.ReplaceAllStringFunc(
+					cmdStr,
+					func(match string) string {
+						if match == fmt.Sprintf("{%s}", paramName) {
+							return fmt.Sprintf("%v", value)
+						}
+						return match
+					})
+			} else if params[paramName].Required {
+				return "", fmt.Errorf("execute tool \"%s\": required parameter %s not provided", cmd, paramName)
+			}
+		}
+
+		// now run the command
+
+		cmdStr = strings.Join(strings.Fields(cmdStr), " ")
+
+		cmdParts := strings.Fields(cmdStr)
+		if len(cmdParts) == 0 {
+			return "", fmt.Errorf("execute tool \"%s\": empty command", cmd)
+		}
+
+		execCmd := exec.CommandContext(ctx, cmdParts[0], cmdParts[1:]...)
+		output, err := execCmd.CombinedOutput()
+		if err != nil {
+			return "", fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
+		}
+
+		return string(output), nil
 	}
 }
 
@@ -108,9 +153,28 @@ func LoadTools(cw *contextwindow.ContextWindow, cfg *ToolsConfig) error {
 
 		cw.AddTool(tool,
 			contextwindow.ToolRunnerFunc(
-				generateCommand(toolCfg.Name, toolCfg.Parameters),
+				generateCommand(toolCfg.Command, toolCfg.Parameters),
 			))
 	}
 
 	return nil
+}
+
+// for a given optional [--flag {foo}{bar}], check to see if we have
+// both {foo} and {bar}, so we can either substitute it in or zap the
+// whole flag.
+func hasAllParameters(fragment string, args map[string]interface{}) bool {
+	matches := paramRegex.FindAllStringSubmatch(fragment, -1)
+
+	if len(matches) == 0 {
+		return false
+	}
+
+	for _, match := range matches {
+		paramName := match[1]
+		if _, exists := args[paramName]; !exists {
+			return false
+		}
+	}
+	return true
 }
