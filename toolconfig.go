@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"regexp"
@@ -46,13 +45,10 @@ func toolFromInfoCommand(cmdline string) (ret ToolConfig, err error) {
 		return ret, fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
 	}
 
-	slog.Info("output", "out", string(output))
-
 	if err = toml.Unmarshal(output, &ret); err != nil {
 		return ret, fmt.Errorf("parse failed: %w\nOutput: %s", err, string(output))
 	}
 
-	slog.Info("tool from cmd", "tool", ret)
 	return ret, nil
 }
 
@@ -84,6 +80,22 @@ func LoadToolConfig(configPath string) (*ToolsConfig, error) {
 					tool.Parameters[paramName] = param
 				}
 			}
+		}
+
+		if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(tool.Name) {
+			return nil, fmt.Errorf("tool name '%s' contains invalid characters, must match [a-zA-Z0-9_-]", tool.Name)
+		}
+
+		if tool.Name == "" {
+			return nil, fmt.Errorf("tool name cannot be empty")
+		}
+
+		if tool.Description == "" {
+			return nil, fmt.Errorf("tool '%s' must have a description", tool.Name)
+		}
+
+		if tool.Command == "" {
+			return nil, fmt.Errorf("tool '%s' must have a command", tool.Name)
 		}
 	}
 

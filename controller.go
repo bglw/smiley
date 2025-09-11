@@ -160,6 +160,7 @@ func (t *LLMController) callModel() tea.Msg {
 	response, err := t.context.CallModel(context.TODO())
 
 	if err != nil {
+		slog.Info("llm call error", "error", err)
 		return msgViewportLog{
 			Msg:   err.Error() + "\n",
 			Style: styleErrorText,

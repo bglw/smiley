@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -26,6 +27,9 @@ func (tm *tuiMiddleware) OnToolResult(ctx context.Context, name, result string, 
 	} else {
 		msg = fmt.Sprintf("%s: (%d bytes)", name, len(result))
 	}
+
+	slog.Debug("llm", "name", name, "result", result)
+
 	tm.program.Send(msgToolCall{
 		complete: true,
 		size:     len(result),
