@@ -1,4 +1,4 @@
-module tui-app
+module smiley
 
 go 1.24.3
 
