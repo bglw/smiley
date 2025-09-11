@@ -50,6 +50,8 @@ type rootWindow struct {
 //go:embed systemprompt.default.md
 var defaultSystemPrompt string
 
+var optLogTools = flag.Bool("log-tools", false, "Record tool invocations/responses in the transcript")
+
 type msgInit struct{}
 type msgSwitchScreen int
 

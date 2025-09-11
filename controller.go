@@ -101,10 +101,14 @@ func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case msgToolCall:
-		return t, viewLog(string(msg)+"\n", styleToolLogText)
+		if *optLogTools {
+			return t, viewLog(string(msg)+"\n", styleToolLogText)
+		}
 
 	case msgToolResult:
-		return t, viewLog(string(msg)+"\n", styleToolResponseText)
+		if *optLogTools {
+			return t, viewLog(string(msg)+"\n", styleToolResponseText)
+		}
 
 	case msgSelectContext:
 		return t.selectContext(string(msg))
