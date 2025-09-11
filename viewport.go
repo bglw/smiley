@@ -27,8 +27,6 @@ type msgViewportLog struct {
 type msgResetViewport []msgViewportLog
 
 func NewViewport(id, content string) *Viewport {
-	lines := strings.Split(content, "\n")
-
 	v := Viewport{
 		ID:      id,
 		vm:      viewport.New(0, 0),

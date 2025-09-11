@@ -4,11 +4,14 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,6 +32,7 @@ type WindowSize struct {
 }
 
 type rootWindow struct {
+	initialPrompt  string
 	p              *tea.Program
 	status, bottom tea.Model
 	state          int
@@ -44,8 +48,12 @@ type rootWindow struct {
 type msgInit struct{}
 type msgSwitchScreen int
 
-func newRootWindow(content string, cw *contextwindow.ContextWindow) rootWindow {
+func newRootWindow(content string,
+	cw *contextwindow.ContextWindow,
+	initialPrompt string) rootWindow {
 	m := rootWindow{}
+
+	m.initialPrompt = initialPrompt + "\n"
 
 	m.status = NewStatus()
 
@@ -64,9 +72,16 @@ func newRootWindow(content string, cw *contextwindow.ContextWindow) rootWindow {
 }
 
 func init() {
-	f, err := os.OpenFile("/tmp/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		log.Fatalf("error opening log file: %v", err)
+	var (
+		f   io.Writer = io.Discard
+		err error
+	)
+
+	if os.Getenv("DEBUG") != "" {
+		f, err = os.OpenFile("/tmp/app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			log.Fatalf("error opening log file: %v", err)
+		}
 	}
 
 	logger := slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{
@@ -98,9 +113,29 @@ func filterKey(msg tea.Msg, keys ...string) bool {
 }
 
 func (m rootWindow) Init() tea.Cmd {
-	return func() tea.Msg {
-		return msgInit{}
-	}
+	return tea.Sequence(
+		func() tea.Msg {
+			return msgInit{}
+		},
+		func() tea.Msg {
+			if m.initialPrompt != "" {
+				// i should be purged i should be flogged
+				time.Sleep(500 * time.Millisecond)
+
+				// BUG(tqbf): that sleep actually fixes a problem
+				// we were having where the initial prompt, if
+				// provided, generated an OpenAI API error about
+				// not having the previous-conversation field
+				// set on that first prompt. Obviously, need
+				// figure that the hell out.
+
+				return msgInputSubmit(m.initialPrompt)
+			}
+
+			return nil
+		},
+	)
+
 }
 
 func (m *rootWindow) resize(w, h int) tea.Cmd {
@@ -248,6 +283,8 @@ func main() {
 
 	flag.Parse()
 
+	prompt := strings.TrimSpace(strings.Join(flag.Args(), " "))
+
 	cfgdir, err := ensureCtxAgentDir()
 	if err != nil {
 		eprintf("Find ~/.ctxagent: %v", err)
@@ -291,7 +328,7 @@ func main() {
 		}
 	}
 
-	m := newRootWindow("", cw)
+	m := newRootWindow("", cw, prompt)
 	m.db = db
 
 	llm := LLMController{
