@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -16,7 +17,6 @@ type Viewport struct {
 	live    *strings.Builder
 	ID      string
 	vm      viewport.Model
-	w, h    int
 }
 
 type msgViewportLog struct {
@@ -62,6 +62,7 @@ func (v *Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Loc == v.ID {
 			v.vm.Height = msg.Height
 			v.vm.Width = msg.Width
+			v.rewrap()
 		}
 
 	default:
@@ -81,9 +82,15 @@ func (v *Viewport) View() string {
 }
 
 func (v *Viewport) rewrap() {
+	if v.vm.Width == 0 {
+		return
+	}
+
+	slog.Info("call rewrap", "w", v.vm.Width, "h", v.vm.Height, "lines", len(v.Content))
+
 	content := make([]string, len(v.Content))
 	for _, c := range v.Content {
-		content = append(content, wordwrap.String(c, v.w-5))
+		content = append(content, wordwrap.String(c, v.vm.Width-5))
 	}
 	v.Content = content
 }
@@ -97,7 +104,7 @@ func (v *Viewport) resetViewport(lines []msgViewportLog) {
 
 	// don't want to call SetContent in a loop
 	for _, line := range lines {
-		entry := line.Style.Render(wordwrap.String(line.Msg, v.w-5))
+		entry := line.Style.Render(wordwrap.String(line.Msg, v.vm.Width-5))
 		v.Content = append(v.Content, entry)
 		v.live.WriteString(entry + "\n")
 	}
@@ -108,7 +115,7 @@ func (v *Viewport) resetViewport(lines []msgViewportLog) {
 func (v *Viewport) Add(c string) {
 	v.lock.Lock()
 	defer v.lock.Unlock()
-	entry := wordwrap.String(c, v.w-5)
+	entry := wordwrap.String(c, v.vm.Width-5)
 	v.Content = append(v.Content, entry)
 	v.live.WriteString(entry + "\n")
 	v.vm.SetContent(v.live.String())
