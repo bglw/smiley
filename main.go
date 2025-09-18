@@ -378,16 +378,17 @@ func main() {
 	m := newRootWindow("", cw, prompt, *contextName)
 	m.db = db
 
-	llm := LLMController{
+	controllers := Controllers{}
+	controllers = append(controllers, &TextAreaInput{})
+	controllers = append(controllers, &SlashCommandController{
+		cr: cw.Reader(),
+	})
+	llm := &LLMController{
 		model:   model,
 		context: cw,
 		db:      db,
 	}
-
-	controllers := Controllers{}
-	controllers = append(controllers, &TextAreaInput{})
-	controllers = append(controllers, &SlashCommandController{})
-	controllers = append(controllers, &llm)
+	controllers = append(controllers, llm)
 	m.controllers = controllers
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())

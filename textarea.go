@@ -35,6 +35,18 @@ func (t Textarea) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds []tea.Cmd
 	)
 
+	isSlash := func() (tea.Cmd, bool) {
+		val := t.ta.Value()
+		if strings.HasPrefix(val, "/") {
+			tokens, _ := shlex.Split(strings.TrimSpace(val))
+			t.ta.Reset()
+			return func() tea.Msg {
+				return msgSlashCommand(tokens)
+			}, true
+		}
+		return nil, false
+	}
+
 	switch msg := msg.(type) {
 	case msgInit:
 		return t, t.Init()
@@ -42,16 +54,15 @@ func (t Textarea) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case msg.Type == tea.KeyEnter:
-			val := t.ta.Value()
-			if strings.HasPrefix(val, "/") {
-				tokens, _ := shlex.Split(strings.TrimSpace(val))
-				t.ta.Reset()
-				return t, func() tea.Msg {
-					return msgSlashCommand(tokens)
-				}
+			if cmd, ok := isSlash(); ok {
+				return t, cmd
 			}
 
 		case key.Matches(msg, CurrentKeyMap.Send):
+			if cmd, ok := isSlash(); ok {
+				return t, cmd
+			}
+
 			val := t.ta.Value()
 			cmds = append(cmds, func() tea.Msg {
 				return msgInputSubmit(val)

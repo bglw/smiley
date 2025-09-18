@@ -57,6 +57,7 @@ func (v *Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case msgViewportLog:
 		v.Add(msg.Style.Render(msg.Msg))
+		v.vm.GotoBottom()
 
 	case WindowSize:
 		if msg.Loc == v.ID {
