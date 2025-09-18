@@ -1,9 +1,12 @@
 package main
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/shlex"
 )
 
 type Textarea struct {
@@ -38,6 +41,16 @@ func (t Textarea) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch {
+		case msg.Type == tea.KeyEnter:
+			val := t.ta.Value()
+			if strings.HasPrefix(val, "/") {
+				tokens, _ := shlex.Split(strings.TrimSpace(val))
+				t.ta.Reset()
+				return t, func() tea.Msg {
+					return msgSlashCommand(tokens)
+				}
+			}
+
 		case key.Matches(msg, CurrentKeyMap.Send):
 			val := t.ta.Value()
 			cmds = append(cmds, func() tea.Msg {

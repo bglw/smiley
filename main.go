@@ -386,6 +386,7 @@ func main() {
 
 	controllers := Controllers{}
 	controllers = append(controllers, &TextAreaInput{})
+	controllers = append(controllers, &SlashCommandController{})
 	controllers = append(controllers, &llm)
 	m.controllers = controllers
 

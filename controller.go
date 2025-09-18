@@ -19,6 +19,7 @@ type msgModelResponse string
 type msgWorking bool
 type msgSelectContext string
 type msgTokenUsage float64
+type msgSlashCommand []string
 
 type msgToolCall struct {
 	name     string
@@ -32,11 +33,21 @@ type TextAreaInput struct {
 }
 
 var (
-	stylePromptText       = lipgloss.NewStyle().Foreground(lipgloss.Color("#a586d9"))
-	styleResponseText     = lipgloss.NewStyle().Foreground(lipgloss.Color("#e9f5ea"))
+	// magenta
+	stylePromptText = lipgloss.NewStyle().Foreground(lipgloss.Color("#a586d9"))
+
+	// bright white
+	styleResponseText = lipgloss.NewStyle().Foreground(lipgloss.Color("#e9f5ea"))
+
+	// bright black
 	styleToolLogText      = lipgloss.NewStyle().Foreground(lipgloss.Color("#3c5a42")).Faint(true)
 	styleToolResponseText = lipgloss.NewStyle().Foreground(lipgloss.Color("#3c5a42"))
-	styleErrorText        = lipgloss.NewStyle().Foreground(lipgloss.Color("#dd9f6b")).Faint(true)
+
+	// bright yellow
+	styleErrorText = lipgloss.NewStyle().Foreground(lipgloss.Color("#dd9f6b")).Faint(true)
+
+	// bright pink?
+	styleSlashResult = lipgloss.NewStyle().Foreground(lipgloss.Color("#e592ab"))
 )
 
 func viewLog(msg string, style lipgloss.Style) tea.Cmd {
