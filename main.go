@@ -35,6 +35,7 @@ type WindowSize struct {
 
 type rootWindow struct {
 	initialPrompt  string
+	contextName    string
 	p              *tea.Program
 	status, bottom tea.Model
 	state          int
@@ -55,11 +56,15 @@ var optLogTools = flag.Bool("log-tools", false, "Record tool invocations/respons
 type msgInit struct{}
 type msgSwitchScreen int
 
-func newRootWindow(content string,
+func newRootWindow(
+	content string,
 	cw *contextwindow.ContextWindow,
-	initialPrompt string) rootWindow {
+	initialPrompt string,
+	contextName string,
+) rootWindow {
 	m := rootWindow{}
 
+	m.contextName = contextName
 	m.initialPrompt = initialPrompt + "\n"
 
 	m.status = NewStatus()
@@ -125,7 +130,16 @@ func (m rootWindow) Init() tea.Cmd {
 			return msgInit{}
 		},
 		func() tea.Msg {
-			if m.initialPrompt != "" {
+			if m.contextName != "" {
+				return msgSelectContext(m.contextName)
+			}
+
+			return nil
+		},
+		func() tea.Msg {
+			if m.initialPrompt != "\n" {
+				slog.Info("have initial prompt", "prompt", m.initialPrompt)
+
 				// i should be purged i should be flogged
 				time.Sleep(500 * time.Millisecond)
 
@@ -284,10 +298,11 @@ func mustGetenv(v string) string {
 
 func main() {
 	var (
-		systemMd   = flag.String("system", "", "Path to system.md")
-		toolConfig = flag.String("tools", "", "Path to tools.toml")
-		contextDb  = flag.String("db", "", "Path to contextwindow.db")
-		maxTokens  = flag.Int("maxtokens", 60_000, "Maximum tokens before compacting")
+		systemMd    = flag.String("system", "", "Path to system.md")
+		toolConfig  = flag.String("tools", "", "Path to tools.toml")
+		contextDb   = flag.String("db", "", "Path to contextwindow.db")
+		contextName = flag.String("name", "", "Optional conversation name")
+		maxTokens   = flag.Int("maxtokens", 60_000, "Maximum tokens before compacting")
 	)
 
 	flag.Usage = func() {
@@ -346,7 +361,7 @@ func main() {
 		eprintf("Connect to LLM: %v", err)
 	}
 
-	cw, err := contextwindow.NewContextWindowWithThreading(db, model, "", true)
+	cw, err := contextwindow.NewContextWindowWithThreading(db, model, *contextName, true)
 	if err != nil {
 		eprintf("Create context window: %v", err)
 	}
@@ -360,7 +375,7 @@ func main() {
 		}
 	}
 
-	m := newRootWindow("", cw, prompt)
+	m := newRootWindow("", cw, prompt, *contextName)
 	m.db = db
 
 	llm := LLMController{
