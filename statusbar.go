@@ -11,12 +11,13 @@ import (
 )
 
 type Status struct {
-	w           int
-	spinner     spinner.Model
-	spinning    bool
-	usage       float64
-	currentTool string
-	totalTools  int
+	w              int
+	spinner        spinner.Model
+	spinning       bool
+	usage          float64
+	currentTool    string
+	currentContext string
+	totalTools     int
 }
 
 func freshSpinner() spinner.Model {
@@ -49,6 +50,9 @@ func (s Status) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case msgInit:
 		return s, s.Init()
+
+	case msgSelectContext:
+		s.currentContext = string(msg)
 
 	case msgWorking:
 		if msg == true {
@@ -100,6 +104,11 @@ func (s Status) View() string {
 	rb.WriteString(barStyle.Render(s.spinner.View()))
 	rb.WriteString(barStyle.Bold(true).Render(" | "))
 	rb.WriteString(barStyle.Render(fmt.Sprintf("%d%% full", int(math.Round(s.usage*100)))))
+
+	if s.currentContext != "" {
+		rb.WriteString(barStyle.Bold(true).Render(" | "))
+		rb.WriteString(barStyle.Render(s.currentContext))
+	}
 
 	lStyle := barStyle.Align(lipgloss.Right)
 

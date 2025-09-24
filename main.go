@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/google/uuid"
 	"github.com/superfly/contextwindow"
 )
 
@@ -303,6 +304,7 @@ func main() {
 		contextDb   = flag.String("db", "", "Path to contextwindow.db")
 		contextName = flag.String("name", "", "Optional conversation name")
 		maxTokens   = flag.Int("maxtokens", 60_000, "Maximum tokens before compacting")
+		forkFrom    = flag.String("fork", "", "Conversation to fork")
 	)
 
 	flag.Usage = func() {
@@ -361,7 +363,20 @@ func main() {
 		eprintf("Connect to LLM: %v", err)
 	}
 
-	cw, err := contextwindow.NewContextWindowWithThreading(db, model, *contextName, true)
+	var cw *contextwindow.ContextWindow
+
+	if *forkFrom != "" {
+		if *contextName == "" {
+			*contextName = uuid.New().String()
+		}
+
+		err = contextwindow.CloneContext(db, *forkFrom, *contextName)
+		if err != nil {
+			eprintf("Create context window: %v", err)
+		}
+	}
+
+	cw, err = contextwindow.NewContextWindowWithThreading(db, model, *contextName, true)
 	if err != nil {
 		eprintf("Create context window: %v", err)
 	}
