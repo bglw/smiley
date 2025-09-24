@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 	"github.com/superfly/contextwindow"
@@ -25,6 +26,7 @@ type ToolConfig struct {
 	Command     string                   `toml:"command"`
 	InfoCommand string                   `toml:"info_command"`
 	Parameters  map[string]ToolParameter `toml:"parameters"`
+	Builtin     bool                     `toml:"builtin"`
 }
 
 type ToolsConfig struct {
@@ -90,11 +92,11 @@ func LoadToolConfig(configPath string) (*ToolsConfig, error) {
 			return nil, fmt.Errorf("tool name cannot be empty")
 		}
 
-		if tool.Description == "" {
+		if tool.Description == "" && !tool.Builtin {
 			return nil, fmt.Errorf("tool '%s' must have a description", tool.Name)
 		}
 
-		if tool.Command == "" {
+		if tool.Command == "" && !tool.Builtin {
 			return nil, fmt.Errorf("tool '%s' must have a command", tool.Name)
 		}
 	}
@@ -179,8 +181,61 @@ func generateCommand(
 	}
 }
 
+// TODO(tqbf): this is repulsive but whatever
+var (
+	lockBuiltins sync.Mutex
+	builtins     = map[string]BuiltinTool{}
+)
+
+func LoadBuiltin(name string, t BuiltinTool) {
+	lockBuiltins.Lock()
+	defer lockBuiltins.Unlock()
+
+	builtins[name] = t
+}
+
+func loadBuiltin(cw *contextwindow.ContextWindow, cfg ToolConfig) error {
+	lockBuiltins.Lock()
+	defer lockBuiltins.Unlock()
+
+	bt, ok := builtins[cfg.Name]
+	if !ok {
+		return fmt.Errorf("builtin %s: not found", cfg.Name)
+	}
+
+	desc := bt.ToolDescription()
+
+	var builtinCfg ToolConfig
+	if err := toml.Unmarshal([]byte(desc), &builtinCfg); err != nil {
+		return fmt.Errorf("parse builtin tool description: %w", err)
+	}
+
+	tool := contextwindow.NewTool(builtinCfg.Name, builtinCfg.Description)
+	for pk, pv := range builtinCfg.Parameters {
+		switch pv.Type {
+		case "string":
+			tool = tool.AddStringParameter(pk, pv.Description, pv.Required)
+		case "number":
+			tool = tool.AddNumberParameter(pk, pv.Description, pv.Required)
+		default:
+			return fmt.Errorf("load builtin %s: unknown parameter type \"%s\"",
+				builtinCfg.Name, pv.Type)
+		}
+	}
+
+	cw.AddTool(tool, bt)
+	return nil
+}
+
 func LoadTools(cw *contextwindow.ContextWindow, cfg *ToolsConfig) error {
 	for _, toolCfg := range cfg.Tools {
+		if toolCfg.Builtin {
+			if err := loadBuiltin(cw, toolCfg); err != nil {
+				return fmt.Errorf("load tools: builtin: %w", err)
+			}
+			continue
+		}
+
 		tool := contextwindow.NewTool(
 			toolCfg.Name,
 			toolCfg.Description)
