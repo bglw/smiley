@@ -322,6 +322,8 @@ func main() {
 		eprintf("Find ~/.ctxagent: %v", err)
 	}
 
+	LoadBuiltin("todo", &Todo{})
+
 	toolConfigPath := filepath.Join(cfgdir, "tools.toml")
 
 	if *toolConfig != "" {
