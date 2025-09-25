@@ -142,8 +142,6 @@ func (t *TUIAgentController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 	return t, nil
 }
 
-// callModel is now handled by agent.SendPrompt()
-
 func (t *TUIAgentController) selectContext(name string) (Controller, tea.Cmd) {
 	err := t.agent.SwitchContext(name)
 	if err != nil {
@@ -192,5 +190,3 @@ func (t *TUIAgentController) selectContext(name string) (Controller, tea.Cmd) {
 		},
 	)
 }
-
-// tokenUsage is now handled by agent events
