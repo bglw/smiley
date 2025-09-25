@@ -3,20 +3,34 @@
 <img src="https://drive.usercontent.google.com/download?id=1ciE3NUiyCAJeIH0nr8yWVP_spcJL1l-4" width="400" />
 
 This is a minimal TUI that manages multiple SQLite-backed LLM conversations
-(contexts) with configurable tool calls. I'm pretty sure you can do all of 
-this with Simon Willison's LLM tool already. This is basically example code
-for [a context window library](https://www.github.com/superfly/contextwindow).
+(contexts) with configurable tool calls. 
 
-Demands `OPENAI_API_KEY` set in the environment. Sorry!
+You can probably do all this with [simonw's LLM tool](https://github.com/simonw/llm). 
+So why build this?
+
+1. Everyone should build an agent; it's eye-opening (and surprisingly easy).
+
+2. I'm experimenting with context patterns; handling things that blow out 
+   context windows (like a large log query). That requires control over 
+   the agent loop itself.
+   
+3. MCP is annoying and this agent doesn't need it.
+
+This is basically example code for [a context window
+library](https://www.github.com/superfly/contextwindow).
+
+## Running
+
+Set `OPENAI_API_KEY`, build, and run. Will want to own `$HOME/.ctxagent`, 
+where it'll park a `contextwindow.db` SQLite.
 
 When run for the first time, it's going to want to create a `~/.ctxagent`,
 which is where it'll stick its database by default (you can tell it where
 to stick it). 
 
-Tools are programs, shell scripts, whatever, defined by `~/.ctxagent/tools.toml`,
-or whatever file you point `-tools foo.toml` at.
+## The Interface
 
-Once running: 
+Is inscrutable (I know how to drive it so I don't have to care). Basics:
 
 * `C-j` to send text to the LLM. This is annoying but it's what Gemini
   does too.
@@ -25,87 +39,76 @@ Once running:
 
 * `C-l` to go back to the LLM conversation.
 
+* `PgUp`, `PgDown`, `End`, and the mouse wheel should all scroll the LLM
+  conversation.
+  
+* `/dump <filename.md>` in the TUI will give you a Markdown dump of the
+  conversation.
+  
+### Flags
+
+* `-system <prompt.md>`: set a system prompt; we'll also read it from
+  `~/.ctxagent/system.md` if it's there.
+  
+* `-tools <tools.toml>`: load a tool configuration; we'll also read it
+  from `~/.ctxagent/tools.toml` if it's there.
+  
+* `-name <name>`: name the conversation.
+
+* `-fork <name>`: fork an existing conversation (copy and resume it).
+  
+Running the agent with the name of an existing conversation resumes it.
+
 ## Tool Configuration
 
-Claude wrote everything that follows (but not that much of the code! don't
-@ me!). I think this is probably true though.
+**Do not give this code tools that can make nonreversible changes to your
+environment.**
 
-The application supports configurable tool calls that allow the LLM to execute local commands and scripts. Tools are configured via a TOML file located at `~/.ctxagent/tools.toml`.
+**Beware: any sensitive information you give this access to will be logged
+in your `contextwindow.db`.**
 
-### Tool Configuration Format
+```toml
+[[tool]]
+name = "ping"
+description = """
+Test network connectivity.
+"""
+command = "ping -c 10 -i 0.1 {host}"
 
-Each tool is defined with:
+[tool.parameters]
+host = { description = "A hostname or IP address.", required = true }
+
+[[tool]]
+name = "todo"
+builtin = true
+
+[[tool]]
+info_command = "../agent-tools/agent-tools slack info"
+```
+
+A tool is normally compromised of:
 
 - **name**: Unique identifier for the tool
 - **description**: Multi-paragraph description that teaches the LLM when and how to use the tool
 - **command**: Shell command or script to execute when the tool is called
 - **parameters**: Optional parameters the tool accepts
 
-### Parameter Configuration
-
-These are deliberately simple right now. 
-
-Parameters support:
+Each `parameter` is:
 
 - **type**: `"string"`or `"number"`
 - **description**: Explanation of what the parameter does
 - **required**: `true` or `false` (default)
 
-### Example Configuration
+Two other ways to define a tool:
 
-```toml
-[[tool]]
-name = "get_logs"
-description = """
-Retrieve logs from OpenSearch using KQL queries. Use this when you need to investigate
-system issues, errors, or analyze application behavior. The query should be in KQL format.
-"""
-command = "llmtool run-tool get-logs"
-
-[tool.parameters]
-query = { description = "KQL query to filter logs", required = true }
-limit = { type = "number", description = "Maximum number of results to return" }
-```
-
-### Automatic Tool Configuration
-
-If you provide an `info_command`, we'll call that to figure out what the tool definition
-should be. Example:
-
-```
-[[tool]]
-info_command = "/usr/local/bin/agent-tool foo info"
-
-```
+* Specify `info_command` and we'll read the TOML for the tool definition from
+  the output of that command, which is useful if you want to bundle tools
+  and their configurations in a single shell script or binary.
+  
+* Specify `builtin` and we'll run a builtin command (TK.)
 
 **Annoying note**: Right now, the output of that command needs to be the TOML for 
 a *single tool definition* --- don't include `[[tool]]` at the top, and it's 
 `[parameters]` and not `[tool.parameters]`. This is dumb but it's the way it is.
-
-Configuring tools this way makes it simpler to package tool definitions into a single
-shell script or binary or whatever without moving around weird big config files. I like
-it.
-
-### Setup
-
-1. Copy `tools.toml.example` to `~/.ctxagent/tools.toml`
-2. Customize the configuration for your specific tools
-3. Ensure your tool scripts/commands are executable and in your PATH
-
-The application will automatically load the tool configuration on startup. If no configuration file exists, the application will run without tool support.
-
-## Code shape
-
-Pretty vanilla Bubbletea app. `rootWindow` is the main model; everything
-else is a tree of models hanging off it, `rootWindow.top` wraps whatever
-the current view is. `controllers` are model-like
-without any view code, most of the actual agentry is in the ContextWindow
-library. The Bubbletea people say not to use `tea.Cmd` to send messages
-between components, but I don't see a cleaner way to do it, so that's what
-I do. Suck it, Bubbletea people! (The library is great, thxu).
-
-
-
-
 
 
