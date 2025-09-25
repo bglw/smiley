@@ -323,6 +323,8 @@ func main() {
 	}
 
 	LoadBuiltin("todo", &Todo{})
+	LoadBuiltin("review", &Review{})
+	LoadBuiltin("lobotomize", &Lobotomize{})
 
 	toolConfigPath := filepath.Join(cfgdir, "tools.toml")
 
