@@ -20,6 +20,19 @@ type Agent struct {
 	OnEvent func(Message)
 }
 
+func NewAgentForked(db *sql.DB, model contextwindow.Model, contextName, oldName string) (*Agent, error) {
+	if contextName == "" {
+		contextName = uuid.New().String()
+	}
+
+	err := contextwindow.CloneContext(db, oldName, contextName)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewAgent(db, model, contextName)
+}
+
 func NewAgent(db *sql.DB, model contextwindow.Model, contextName string) (*Agent, error) {
 	if contextName == "" {
 		contextName = uuid.New().String()

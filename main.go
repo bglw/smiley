@@ -103,12 +103,13 @@ func main() {
 		eprintf("Connect to LLM: %v", err)
 	}
 
-	// TODO: Fork context functionality needs to be implemented with new API
-	if *forkFrom != "" {
-		eprintf("Fork context functionality not yet implemented with new API")
-	}
+	var ag *agent.Agent
 
-	ag, err := agent.NewAgent(db, model, *contextName)
+	if *forkFrom != "" {
+		ag, err = agent.NewAgentForked(db, model, *contextName, *forkFrom)
+	} else {
+		ag, err = agent.NewAgent(db, model, *contextName)
+	}
 	if err != nil {
 		eprintf("Create agent: %v", err)
 	}
