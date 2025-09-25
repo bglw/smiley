@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/muesli/reflow v0.3.0
 	github.com/stretchr/testify v1.10.0
-	github.com/superfly/contextwindow v0.1.4
+	github.com/superfly/contextwindow v0.1.8
 )
 
 require (

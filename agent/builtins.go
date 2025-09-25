@@ -191,18 +191,21 @@ func (l *Lobotomize) Run(ctx context.Context, rawargs json.RawMessage) (string, 
 		return "", err
 	}
 
-	_, ok := mapGet[float64](args, "start")
+	start, ok := mapGet[float64](args, "start")
 	if !ok {
 		return "", fmt.Errorf("must provide 'start' parameter")
 	}
 
-	_, ok = mapGet[float64](args, "end")
+	end, ok := mapGet[float64](args, "end")
 	if !ok {
 		return "", fmt.Errorf("must provide 'end' parameter")
 	}
 
-	// TODO: API has changed, need to find new way to set record live state
-	return "Lobotomize functionality temporarily disabled due to API changes\n", nil
+	if err := l.cw.SetRecordLiveStateByRange(int(start), int(end), false); err != nil {
+		return "", fmt.Errorf("neutralizing records failed: %w", err)
+	}
+
+	return "Success.\n", nil
 }
 
 func mapGet[T any](m map[string]any, key string) (T, bool) {
