@@ -223,6 +223,10 @@ func loadBuiltin(cw *contextwindow.ContextWindow, cfg ToolConfig) error {
 		}
 	}
 
+	if err := bt.Init(cw); err != nil {
+		return fmt.Errorf("load builtin: init: %w", err)
+	}
+
 	cw.AddTool(tool, bt)
 	return nil
 }

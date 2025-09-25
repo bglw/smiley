@@ -50,6 +50,11 @@ func (v *Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if filterKey(msg, "pgup", "pgdown", "alt+up", "alt+down") {
 			v.vm, cmd = v.vm.Update(msg)
+		} else {
+			switch msg.Type {
+			case tea.KeyEnd:
+				v.vm.GotoBottom()
+			}
 		}
 
 	case msgResetViewport:

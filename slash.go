@@ -18,8 +18,9 @@ func (t *SlashCommandController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 	switch msg := msg.(type) {
 	case msgSlashCommand:
 		slashCommands := map[string]func([]string) (string, error){
-			"/help": t.slashHelp,
-			"/dump": t.slashDump,
+			"/help":    t.slashHelp,
+			"/dump":    t.slashDump,
+			"/summary": t.slashSummary,
 		}
 
 		if fn, ok := slashCommands[strings.ToLower(msg[0])]; ok {
@@ -79,4 +80,35 @@ func (t *SlashCommandController) slashDump(args []string) (string, error) {
 	}
 
 	return fmt.Sprintf("Exported %d records to %s", len(records), path), nil
+}
+
+func (t *SlashCommandController) slashSummary(args []string) (string, error) {
+	records, err := t.cr.LiveRecords()
+	if err != nil {
+		return "", err
+	}
+
+	trunc := func(s string, n int) string {
+		if len(s) <= n {
+			return s
+		}
+		return fmt.Sprintf("%s... + %d bytes", s[:n], len(s)-n)
+	}
+
+	buf := &strings.Builder{}
+
+	for i, record := range records {
+		switch record.Source {
+		case contextwindow.Prompt:
+			fmt.Fprintf(buf, "%d (user) %s...\n", i, trunc(record.Content, 40))
+		case contextwindow.ModelResp:
+			fmt.Fprintf(buf, "%d (model) %s...\n", i, trunc(record.Content, 40))
+		case contextwindow.ToolCall:
+			fmt.Fprintf(buf, "%d (toolcall) %s...\n", i, trunc(record.Content, 40))
+		case contextwindow.ToolOutput:
+			fmt.Fprintf(buf, "%d (tool) %s...\n", i, trunc(record.Content, 40))
+		}
+	}
+
+	return buf.String() + "\n", nil
 }
