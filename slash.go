@@ -11,7 +11,7 @@ import (
 )
 
 type SlashCommandController struct {
-	cr *contextwindow.ContextReader
+	cw *contextwindow.ContextWindow
 }
 
 func (t *SlashCommandController) Update(msg tea.Msg) (Controller, tea.Cmd) {
@@ -56,7 +56,7 @@ func (t *SlashCommandController) slashDump(args []string) (string, error) {
 	}
 	defer f.Close()
 
-	records, err := t.cr.LiveRecords()
+	records, err := t.cw.LiveRecords()
 	if err != nil {
 		return "", fmt.Errorf("/dump: failed to read context: %w", err)
 	}
@@ -83,7 +83,7 @@ func (t *SlashCommandController) slashDump(args []string) (string, error) {
 }
 
 func (t *SlashCommandController) slashSummary(args []string) (string, error) {
-	records, err := t.cr.LiveRecords()
+	records, err := t.cw.LiveRecords()
 	if err != nil {
 		return "", err
 	}

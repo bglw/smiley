@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
-	"database/sql"
 	"log/slog"
-	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/superfly/contextwindow"
+
+	"smiley/agent"
 )
 
 // controllers are thingies that do the Update protocol but not the View protocol.
@@ -105,94 +104,52 @@ func (t *TextAreaInput) Update(msg tea.Msg) (Controller, tea.Cmd) {
 	return t, tea.Batch(cmds...)
 }
 
-type LLMController struct {
-	lock    sync.Mutex
-	model   contextwindow.Model
-	context *contextwindow.ContextWindow
-	db      *sql.DB
+type TUIAgentController struct {
+	agent *agent.Agent
 }
 
-func (t *LLMController) Update(msg tea.Msg) (Controller, tea.Cmd) {
-	var (
-		cmd  tea.Cmd
-		cmds []tea.Cmd
-	)
-
+func (t *TUIAgentController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 	switch msg := msg.(type) {
 	case msgModelResponse:
-		cmds = append(cmds, viewLog(string(msg)+"\n", styleResponseText))
-		cmds = append(cmds, t.tokenUsage())
-		return t, tea.Batch(cmds...)
+		return t, viewLog(string(msg)+"\n", styleResponseText)
 
 	case msgToolCall:
-		cmds = []tea.Cmd{t.tokenUsage()}
-
 		if *optLogTools {
 			if !msg.complete {
-				cmds = append(cmds, viewLog(string(msg.msg)+"\n", styleToolLogText))
+				return t, viewLog(string(msg.msg)+"\n", styleToolLogText)
 			} else {
-				cmds = append(cmds, viewLog(string(msg.msg)+"\n", styleToolResponseText))
+				return t, viewLog(string(msg.msg)+"\n", styleToolResponseText)
 			}
 		}
-
-		return t, tea.Batch(cmds...)
+		return t, nil
 
 	case msgSelectContext:
 		return t.selectContext(string(msg))
 
 	case msgPromptUpdate:
-		t.lock.Lock()
-		t.context.AddPrompt(string(msg))
-		t.lock.Unlock()
-
-		cmds = append(cmds, []tea.Cmd{
-			func() tea.Msg {
-				return msgWorking(true)
-			},
-			t.tokenUsage(),
-			t.callModel,
-			func() tea.Msg {
-				return msgWorking(false)
-			},
-		}...)
-	}
-
-	if len(cmds) > 0 {
-		cmd = tea.Sequence(cmds...)
-	}
-
-	return t, cmd
-}
-
-func (t *LLMController) callModel() tea.Msg {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	response, err := t.context.CallModel(context.TODO())
-
-	if err != nil {
-		slog.Info("llm call error", "error", err)
-		return msgViewportLog{
-			Msg:   err.Error() + "\n",
-			Style: styleErrorText,
+		return t, func() tea.Msg {
+			err := t.agent.SendPrompt(string(msg))
+			if err != nil {
+				return msgViewportLog{
+					Msg:   err.Error() + "\n",
+					Style: styleErrorText,
+				}
+			}
+			return nil
 		}
-
 	}
 
-	return msgModelResponse(response)
+	return t, nil
 }
 
-func (t *LLMController) selectContext(name string) (Controller, tea.Cmd) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	err := t.context.SwitchContext(name)
+func (t *TUIAgentController) selectContext(name string) (Controller, tea.Cmd) {
+	err := t.agent.SwitchContext(name)
 	if err != nil {
 		slog.Error("switch context", "error", err)
 		return t, nil
 	}
 
-	records, err := t.context.LiveRecords()
+	records, err := t.agent.GetContextWindow().LiveRecords()
 	if err != nil {
 		slog.Error("read records", "error", err)
 		return t, nil
@@ -232,16 +189,4 @@ func (t *LLMController) selectContext(name string) (Controller, tea.Cmd) {
 			return msgSwitchScreen(screenLog)
 		},
 	)
-}
-
-func (t *LLMController) tokenUsage() tea.Cmd {
-	usage, err := t.context.TokenUsage()
-
-	if err != nil {
-		return nil
-	}
-
-	return func() tea.Msg {
-		return msgTokenUsage(usage.Percent)
-	}
 }
