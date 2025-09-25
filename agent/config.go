@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-func ensureCtxAgentDir() (string, error) {
+func EnsureCtxAgentDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("get user home directory: %w", err)

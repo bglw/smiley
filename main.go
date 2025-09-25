@@ -18,8 +18,10 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/google/uuid"
+
 	"github.com/superfly/contextwindow"
+
+	"smiley/agent"
 )
 
 const (
@@ -317,27 +319,19 @@ func main() {
 
 	prompt := strings.TrimSpace(strings.Join(flag.Args(), " "))
 
-	cfgdir, err := ensureCtxAgentDir()
+	cfgdir, err := agent.EnsureCtxAgentDir()
 	if err != nil {
 		eprintf("Find ~/.ctxagent: %v", err)
 	}
 
-	LoadBuiltin("todo", &Todo{})
-	LoadBuiltin("review", &Review{})
-	LoadBuiltin("lobotomize", &Lobotomize{})
+	// Builtin tools will be registered by the agent
 
 	toolConfigPath := filepath.Join(cfgdir, "tools.toml")
 
 	if *toolConfig != "" {
 		toolConfigPath = *toolConfig
 	}
-	tools, err := LoadToolConfig(toolConfigPath)
-	if err != nil {
-		if *toolConfig != "" {
-			eprintf("Load tool config: %v", err)
-		}
-		tools = nil
-	}
+	// Tool config will be handled by the agent
 
 	systemPrompt := defaultSystemPrompt
 	systemPromptPath := filepath.Join(cfgdir, "system.md")
@@ -367,54 +361,76 @@ func main() {
 		eprintf("Connect to LLM: %v", err)
 	}
 
-	var cw *contextwindow.ContextWindow
-
+	// TODO: Fork context functionality needs to be implemented with new API
 	if *forkFrom != "" {
-		if *contextName == "" {
-			*contextName = uuid.New().String()
-		}
-
-		err = contextwindow.CloneContext(db, *forkFrom, *contextName)
-		if err != nil {
-			eprintf("Create context window: %v", err)
-		}
+		eprintf("Fork context functionality not yet implemented with new API")
 	}
 
-	cw, err = contextwindow.NewContextWindowWithThreading(db, model, *contextName, true)
+	// Create agent instead of context window directly
+	ag, err := agent.NewAgent(db, model, *contextName)
 	if err != nil {
-		eprintf("Create context window: %v", err)
+		eprintf("Create agent: %v", err)
 	}
 
-	cw.SetSystemPrompt(systemPrompt)
-	cw.SetMaxTokens(*maxTokens)
+	// Register builtin tools
+	ag.RegisterBuiltinTool("todo", &agent.Todo{})
+	ag.RegisterBuiltinTool("review", &agent.Review{})
+	ag.RegisterBuiltinTool("lobotomize", &agent.Lobotomize{})
 
-	if tools != nil {
-		if err = LoadTools(cw, tools); err != nil {
+	// Configure agent
+	ag.SetSystemPrompt(systemPrompt)
+	ag.SetMaxTokens(*maxTokens)
+
+	// Load external tools
+	if err := ag.LoadTools(toolConfigPath); err != nil {
+		// Only error if explicit tool config was provided
+		if *toolConfig != "" {
 			eprintf("Loading tool definitions from %s: %v", toolConfigPath, err)
 		}
 	}
 
-	m := newRootWindow("", cw, prompt, *contextName)
+	m := newRootWindow("", ag.GetContextWindow(), prompt, *contextName)
 	m.db = db
 
 	controllers := Controllers{}
 	controllers = append(controllers, &TextAreaInput{})
 	controllers = append(controllers, &SlashCommandController{
-		cr: cw.Reader(),
+		cw: ag.GetContextWindow(),
 	})
-	llm := &LLMController{
-		model:   model,
-		context: cw,
-		db:      db,
+	// TUIAgentController will be created after we define it
+	tuiAgent := &TUIAgentController{
+		agent: ag,
 	}
-	controllers = append(controllers, llm)
+	controllers = append(controllers, tuiAgent)
 	m.controllers = controllers
 
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	m.p = p
-	llm.context.AddMiddleware(&tuiMiddleware{
-		program: p,
-	})
+
+	// Set up agent event handler to send TUI messages
+	ag.OnEvent = func(msg agent.Message) {
+		switch msg := msg.(type) {
+		case agent.ToolCallMsg:
+			p.Send(msgToolCall{
+				name:     msg.Name,
+				complete: msg.Complete,
+				err:      msg.Err,
+				size:     msg.Size,
+				msg:      msg.Msg,
+			})
+		case agent.ModelResponseMsg:
+			p.Send(msgModelResponse(msg.Response))
+		case agent.TokenUsageMsg:
+			p.Send(msgTokenUsage(msg.Usage))
+		case agent.WorkingMsg:
+			p.Send(msgWorking(msg.Working))
+		case agent.ErrorMsg:
+			p.Send(msgViewportLog{
+				Msg:   msg.Msg,
+				Style: styleErrorText,
+			})
+		}
+	}
 
 	if _, err := p.Run(); err != nil {
 		eprintf("main program error: %v", err)

@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"context"
@@ -113,8 +113,8 @@ type simpleToolFunction func(context.Context, json.RawMessage) (string, error)
 
 func generateCommand(
 	cmd string,
-	params map[string]ToolParameter) simpleToolFunction {
-
+	params map[string]ToolParameter,
+) simpleToolFunction {
 	return func(ctx context.Context, args json.RawMessage) (string, error) {
 		var parsedArgs map[string]interface{}
 		if err := json.Unmarshal(args, &parsedArgs); err != nil {
