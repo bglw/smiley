@@ -105,9 +105,17 @@ func (a *Agent) SwitchContext(name string) error {
 	return nil
 }
 
-func (a *Agent) ListContexts() ([]string, error) {
-	// TODO: Implement this using db queries
-	return nil, fmt.Errorf("not implemented")
+func (a *Agent) ListContexts() (ret []string, err error) {
+	cs, err := a.context.ListContexts()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, c := range cs {
+		ret = append(ret, c.Name)
+	}
+
+	return ret, nil
 }
 
 func (a *Agent) LoadTools(configPath string) error {
