@@ -8,6 +8,7 @@ type KeyMap struct {
 	Log     key.Binding
 	Quit    key.Binding
 	Switch  key.Binding
+	Modal   key.Binding
 }
 
 var CurrentKeyMap = KeyMap{
@@ -16,4 +17,5 @@ var CurrentKeyMap = KeyMap{
 	Quit:    key.NewBinding(key.WithKeys("ctrl+c")),
 	Log:     key.NewBinding(key.WithKeys("ctrl+l")),
 	Switch:  key.NewBinding(key.WithKeys("shift+tab")),
+	Modal:   key.NewBinding(key.WithKeys("ctrl+k")),
 }
