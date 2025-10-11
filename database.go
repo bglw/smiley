@@ -15,10 +15,11 @@ import (
 type msgContextTableRows []table.Row
 
 type DatabaseView struct {
-	id    string
-	cw    *contextwindow.ContextWindow
-	w, h  int
-	table table.Model
+	id      string
+	cw      *contextwindow.ContextWindow
+	w, h    int
+	table   table.Model
+	focused bool
 }
 
 func NewDatabaseView(id string, cw *contextwindow.ContextWindow) *DatabaseView {
@@ -126,6 +127,9 @@ func (s *DatabaseView) Update(msg tea.Msg) (ret tea.Model, cmd tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case msgFocusChanged:
+		s.focused = (msg.region == "top")
+
 	case msgInit:
 		return s, s.Init()
 
@@ -133,6 +137,10 @@ func (s *DatabaseView) Update(msg tea.Msg) (ret tea.Model, cmd tea.Cmd) {
 		s.table.SetRows([]table.Row(msg))
 
 	case tea.KeyMsg:
+		if !s.focused {
+			break
+		}
+
 		switch msg.String() {
 		case "down":
 			s.table.MoveDown(1)

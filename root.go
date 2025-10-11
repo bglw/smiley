@@ -34,12 +34,16 @@ type rootWindow struct {
 	log            *Viewport
 	controllers    Controller
 	w, h, th, bh   int // top height, bottom height
+	focus          string
 
 	db *sql.DB
 }
 
 type msgInit struct{}
 type msgSwitchScreen int
+type msgFocusChanged struct {
+	region string
+}
 
 func newRootWindow(
 	content string,
@@ -64,6 +68,7 @@ func newRootWindow(
 
 	input := NewTextarea("bottom")
 	m.bottom = input
+	m.focus = "bottom"
 
 	return m
 }
@@ -133,11 +138,23 @@ func (m *rootWindow) resize(w, h int) tea.Cmd {
 		})
 }
 
+func (m rootWindow) switchFocus() (tea.Model, tea.Cmd) {
+	switch m.focus {
+	case "bottom":
+		m.focus = "top"
+	case "top":
+		m.focus = "bottom"
+	}
+
+	return m, func() tea.Msg {
+		return msgFocusChanged{region: m.focus}
+	}
+}
+
 func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmds = []tea.Cmd{}
 		cmd  tea.Cmd
-		keyb bool
 	)
 
 	swtch := func(state int) (tea.Model, tea.Cmd) {
@@ -145,14 +162,20 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case screenHistory:
 			m.top.Inner = m.history
 			m.state = screenHistory
-			return m, nil
 		case screenLog:
 			m.top.Inner = m.log
 			m.state = screenLog
-			return m, nil
 		default:
 			panic("bad state")
 		}
+
+		// Re-broadcast focus if top is focused, so the newly visible widget gets it
+		if m.focus == "top" {
+			return m, func() tea.Msg {
+				return msgFocusChanged{region: "top"}
+			}
+		}
+		return m, nil
 	}
 
 	switch msg := msg.(type) {
@@ -161,9 +184,10 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		slog.Info("keypress", "key", msg)
-		keyb = true
 
 		switch {
+		case key.Matches(msg, CurrentKeyMap.Switch):
+			return m.switchFocus()
 		case key.Matches(msg, CurrentKeyMap.Quit):
 			return m, tea.Quit
 		case key.Matches(msg, CurrentKeyMap.History):
@@ -176,32 +200,18 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.resize(msg.Width, msg.Height))
 	}
 
-	// BUG(tqbf): clean this up
-
 	var rm tea.Model
 
-	if keyb {
-		if m.state != screenHistory {
-			m.bottom, cmd = m.bottom.Update(msg)
-			cmds = append(cmds, cmd)
-			rm, cmd = m.log.Update(msg)
-			m.log = rm.(*Viewport)
-			cmds = append(cmds, cmd)
-		} else {
-			rm, cmd = m.history.Update(msg)
-			m.history = rm.(*DatabaseView)
-			cmds = append(cmds, cmd)
-		}
-	} else {
-		m.bottom, cmd = m.bottom.Update(msg)
-		cmds = append(cmds, cmd)
-		rm, cmd = m.log.Update(msg)
-		m.log = rm.(*Viewport)
-		cmds = append(cmds, cmd)
-		rm, cmd = m.history.Update(msg)
-		m.history = rm.(*DatabaseView)
-		cmds = append(cmds, cmd)
-	}
+	m.bottom, cmd = m.bottom.Update(msg)
+	cmds = append(cmds, cmd)
+
+	rm, cmd = m.log.Update(msg)
+	m.log = rm.(*Viewport)
+	cmds = append(cmds, cmd)
+
+	rm, cmd = m.history.Update(msg)
+	m.history = rm.(*DatabaseView)
+	cmds = append(cmds, cmd)
 
 	m.status, cmd = m.status.Update(msg)
 	cmds = append(cmds, cmd)

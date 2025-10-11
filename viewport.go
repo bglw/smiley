@@ -17,6 +17,7 @@ type Viewport struct {
 	live    *strings.Builder
 	ID      string
 	vm      viewport.Model
+	focused bool
 }
 
 type msgViewportLog struct {
@@ -47,11 +48,18 @@ func (v *Viewport) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case msgFocusChanged:
+		v.focused = (msg.region == "top")
+
 	case tea.KeyMsg:
+		// pgup/pgdown/alt+up/alt+down always work (these are viewport-specific keys)
 		if filterKey(msg, "pgup", "pgdown", "alt+up", "alt+down") {
 			v.vm, cmd = v.vm.Update(msg)
-		} else {
+		} else if v.focused {
+			// Arrow keys and other keys only work when focused
 			switch msg.Type {
+			case tea.KeyUp, tea.KeyDown:
+				v.vm, cmd = v.vm.Update(msg)
 			case tea.KeyEnd:
 				v.vm.GotoBottom()
 			}

@@ -48,6 +48,15 @@ func (t Textarea) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case msgFocusChanged:
+		if msg.region == "bottom" {
+			t.ta.Focus()
+			t.focus = true
+		} else {
+			t.ta.Blur()
+			t.focus = false
+		}
+
 	case msgInit:
 		return t, t.Init()
 
