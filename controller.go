@@ -58,6 +58,16 @@ func viewLog(msg string, style lipgloss.Style) tea.Cmd {
 	}
 }
 
+func checkForFollowups(text string) tea.Cmd {
+	options := parseFollowups(text)
+	if options != nil && len(options) > 9 {
+		options = nil
+	}
+	return func() tea.Msg {
+		return msgShowFollowupModal(options)
+	}
+}
+
 type Controller interface {
 	Update(msg tea.Msg) (Controller, tea.Cmd)
 }
@@ -111,7 +121,11 @@ type TUIAgentController struct {
 func (t *TUIAgentController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 	switch msg := msg.(type) {
 	case msgModelResponse:
-		return t, viewLog(string(msg)+"\n", styleResponseText)
+		cmds := []tea.Cmd{
+			viewLog(string(msg)+"\n", styleResponseText),
+			checkForFollowups(string(msg)),
+		}
+		return t, tea.Batch(cmds...)
 
 	case msgToolCall:
 		if *optLogTools {
@@ -125,6 +139,15 @@ func (t *TUIAgentController) Update(msg tea.Msg) (Controller, tea.Cmd) {
 
 	case msgSelectContext:
 		return t.selectContext(string(msg))
+
+	case msgFollowupSelected:
+		if string(msg) != "" {
+			return t, func() tea.Msg {
+				return msgPromptUpdate(string(msg))
+			}
+		}
+
+		return t, nil
 
 	case msgPromptUpdate:
 		return t, func() tea.Msg {
@@ -181,12 +204,23 @@ func (t *TUIAgentController) selectContext(name string) (Controller, tea.Cmd) {
 		}
 	}
 
-	return t, tea.Sequence(
+	cmds := []tea.Cmd{
 		func() tea.Msg {
 			return msgResetViewport(resetMsg)
 		},
 		func() tea.Msg {
 			return msgSwitchScreen(screenLog)
 		},
-	)
+	}
+
+	for i := len(records) - 1; i >= 0; i-- {
+		if records[i].Source == contextwindow.ModelResp {
+			if cmd := checkForFollowups(records[i].Content); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			break
+		}
+	}
+
+	return t, tea.Sequence(cmds...)
 }
