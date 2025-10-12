@@ -18,6 +18,7 @@ type Status struct {
 	currentTool    string
 	currentContext string
 	totalTools     int
+	hasFollowup    bool
 }
 
 func freshSpinner() spinner.Model {
@@ -81,6 +82,9 @@ func (s Status) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s.totalTools += 1
 		}
 
+	case msgShowFollowupModal:
+		s.hasFollowup = msg.hasFollowups()
+
 	case tea.WindowSizeMsg:
 		s.w = msg.Width
 	}
@@ -108,6 +112,11 @@ func (s Status) View() string {
 	if s.currentContext != "" {
 		rb.WriteString(barStyle.Bold(true).Render(" | "))
 		rb.WriteString(barStyle.Render(s.currentContext))
+	}
+
+	if s.hasFollowup {
+		rb.WriteString(barStyle.Bold(true).Render(" | "))
+		rb.WriteString(barStyle.Render("[followups: ctr-n]"))
 	}
 
 	lStyle := barStyle.Align(lipgloss.Right)

@@ -35,11 +35,12 @@ type rootWindow struct {
 	log            *Viewport
 	controllers    Controller
 	w, h, th, bh   int // top height, bottom height
-	focus string
+	focus          string
 
-	modal        *Modal
-	modalVisible bool
-	overlay      *overlay.Model
+	modal               tea.Model
+	modalVisible        bool
+	overlay             *overlay.Model
+	lastFollowupOptions []FollowupOption
 
 	db *sql.DB
 }
@@ -116,6 +117,10 @@ func (m rootWindow) Init() tea.Cmd {
 
 }
 
+func (m *rootWindow) hasFollowups() bool {
+	return len(m.lastFollowupOptions) > 0
+}
+
 func (m *rootWindow) resize(w, h int) tea.Cmd {
 	if m.h == h && m.w == w {
 		return nil
@@ -159,6 +164,18 @@ func (m rootWindow) switchFocus() (tea.Model, tea.Cmd) {
 	}
 }
 
+func (m *rootWindow) installModal() {
+	m.modal = NewFollowupModal(m.lastFollowupOptions)
+	m.overlay = overlay.New(
+		m.modal,
+		nil,
+		overlay.Center,
+		overlay.Center,
+		0, 0,
+	)
+	m.modalVisible = true
+}
+
 func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var (
 		cmds = []tea.Cmd{}
@@ -193,29 +210,53 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	keyb := false
+
 	switch msg := msg.(type) {
+	case msgShowFollowupModal:
+		if msg.hasFollowups() {
+			m.lastFollowupOptions = msg
+			m.installModal()
+		} else {
+			m.lastFollowupOptions = nil
+		}
+		//return m, nil
+
+	case msgFollowupSelected:
+		m.modalVisible = false
+		if string(msg) != "" {
+			// TODO(tqbf): Wire this to agent submission
+			_ = string(msg)
+		}
+		//return m, nil
+
 	case msgSwitchScreen:
 		return swtch(int(msg))
 
 	case tea.KeyMsg:
 		slog.Info("keypress", "key", msg)
+		keyb = true
 
 		if m.modalVisible {
 			if key.Matches(msg, CurrentKeyMap.Quit) {
 				return m, tea.Quit
 			}
-			return m, nil
-		}
-
-		switch {
-		case key.Matches(msg, CurrentKeyMap.Switch):
-			return m.switchFocus()
-		case key.Matches(msg, CurrentKeyMap.Quit):
-			return m, tea.Quit
-		case key.Matches(msg, CurrentKeyMap.History):
-			return swtch(screenHistory)
-		case key.Matches(msg, CurrentKeyMap.Log):
-			return swtch(screenLog)
+		} else {
+			switch {
+			case key.Matches(msg, CurrentKeyMap.Followup):
+				if m.hasFollowups() {
+					m.installModal()
+					return m, nil
+				}
+			case key.Matches(msg, CurrentKeyMap.Switch):
+				return m.switchFocus()
+			case key.Matches(msg, CurrentKeyMap.Quit):
+				return m, tea.Quit
+			case key.Matches(msg, CurrentKeyMap.History):
+				return swtch(screenHistory)
+			case key.Matches(msg, CurrentKeyMap.Log):
+				return swtch(screenLog)
+			}
 		}
 
 	case tea.WindowSizeMsg:
@@ -224,7 +265,12 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var rm tea.Model
 
-	if !m.modalVisible {
+	if m.modalVisible {
+		m.modal, cmd = m.modal.Update(msg)
+		cmds = append(cmds, cmd)
+	}
+
+	if !keyb /* filter keys when modal up */ || !m.modalVisible {
 		m.bottom, cmd = m.bottom.Update(msg)
 		cmds = append(cmds, cmd)
 
@@ -244,10 +290,6 @@ func (m rootWindow) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.controllers, cmd = m.controllers.Update(msg)
 		cmds = append(cmds, cmd)
-	} else {
-		rm, cmd = m.modal.Update(msg)
-		m.modal = rm.(*Modal)
-		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -261,17 +303,7 @@ func (m rootWindow) View() string {
 	baseView := lipgloss.JoinVertical(lipgloss.Left, m.status.View(), m.top.View(), m.bottom.View())
 
 	if m.modalVisible {
-		if m.overlay == nil {
-			m.overlay = overlay.New(
-				m.modal,
-				&viewModel{content: baseView},
-				overlay.Center,
-				overlay.Center,
-				0, 0,
-			)
-		} else {
-			m.overlay.Background = &viewModel{content: baseView}
-		}
+		m.overlay.Background = &viewModel{content: baseView}
 		return m.overlay.View()
 	}
 
